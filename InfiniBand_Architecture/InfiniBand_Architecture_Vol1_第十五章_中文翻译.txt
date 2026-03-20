@@ -1,0 +1,891 @@
+第十五章：子网管理（Subnet Administration）
+
+15.1 引言与概述
+
+本章中所有来自1.1版本之前的合规性声明均已过时，并已从规范中删除。
+
+本章定义了IBA子网管理（SA）及其功能：所使用的MAD，以及与之相关的功能。
+
+C15-0.1.1: 每个IBA子网都应（shall）提供SA。
+
+15.1.1 SA功能
+
+通过使用子网管理类MAD，SA提供对多种类型信息的访问和存储，其中一些是可选的。
+
+C15-0.1.2: SA应（shall）提供的信息在表189"子网管理属性（摘要）"（第888页）中指定。
+
+涉及的信息类型有：
+
+• 终端节点运行所需的信息。此类信息包括终端节点之间的路径、事件通知、服务属性等。此信息是必需的。
+
+• 通常是非算法性的信息。在上电或初始化事件后，无法通过检查网络以算法方式恢复的信息。此类信息包括分区数据、M_Key、SL到VL映射等。此信息是必需的，以允许从一个厂商的子网管理实现离线迁移到另一个厂商的实现。这是必需的。
+
+• 可能对其他管理实体（如备用SM）有用的信息，例如，它们可能希望使用这些信息来维护与主SM的同步。此类信息包括子网拓扑数据、交换机转发表等。这是可选的。
+
+为了执行这些活动，SA包括两个功能：
+
+• 一个查询子系统，用于标识要发送和接收的信息
+• 一个事件转发子系统，将SM接收到的陷阱和通知转发给已订阅的各方。
+
+实际的SA实现不在架构范围之内。实际的访问QP和DLID可以由GSI重定向。
+
+15.1.2 SA与SM之间的关系
+
+SA提供的大部分（但不是全部）信息由SM创建或收集。因此，SA必须与主SM有密切的关系。该关系定义如下：
+
+• SA是SM的一部分。其功能与SM分开讨论仅是为了描述上的便利。这种描述上的便利并不意图暗示或要求任何特定供应商的SM（或SA）的任何特定实现组织。
+
+• 与任何IB管理类一样，SA功能可以在与持有SM的节点不同的节点上实现；是否这样做是供应商特定的。如果任何SM功能（包括但不限于SA功能）在与标识为持有SM的位置不同的位置上实现，则该功能与任何其他SM元素之间的任何或所有通信都是供应商特定的。
+
+C15-0.1.3: 如果一个SM被选为主SM，其所有组件也应（shall）被隐式选为主组件，包括但不限于SA，无论它们如何实现。如果SM不再是主SM，其所有组件（包括但不限于SA）都应（shall）停止响应来自客户端节点的消息。
+
+15.1.3 概述
+
+本章的其余部分首先定义SA使用的MAD。它还定义了SA的操作。所描述的SA操作包括定位SA以及SA方法及其操作。还描述了信息属性的标识、必须实现的访问限制以及事件转发。
+
+15.2 SA MAD
+
+本节定义SA发送和接收的MAD。
+
+C15-0.1.4: SA MAD是GMP，应（shall）符合13.4"管理数据报"（第717页）中指定的MAD使用规范。
+
+15.2.1 SA MAD格式
+
+C15-0.1.5: 子网管理应（shall）使用图195"子网管理格式"（第884页）所示的数据报格式，以及表185"子网管理字段"（第884页）中指定的字段。
+
+C15-0.1.6: SA类的MADHeader:ClassVersion组件对于本版本的规范应（shall）为2。
+
+15.2.1.1 SA头部
+
+15.2.1.2 SA头部字段
+
+表185 子网管理字段
+
+字段 | 长度 | 描述
+SM_Key | 64位 | 子网管理器验证密钥：用于验证请求来自可信来源。
+• 对于SA请求，此字段应（shall）为零或有效的SM_Key。如果这两个值都不存在，请求应（shall）被丢弃，建议SM对此事件做适当记录。
+• 对于SA响应，此字段应（shall）设置为零。参见第十四章"子网管理"（第794页）和15.4.1"访问限制"（第921页）。
+
+AttributeOffset | 16位 | 在RMPP DATA数据包中：从一个属性开始到下一个属性开始的8字节字数。要计算以字节为单位的偏移量，将AttributeOffset乘以8。在任何单个RMPP传输过程中，AttributeOffset不应（shall not）改变。
+其他情况：忽略
+
+Reserved | 16位 | 保留
+
+ComponentMask | 64位 | 用于指示SA操作中使用的属性组件。位0映射到第一个属性组件，位1映射到第二个属性组件，依此类推。位设置为1表示属性组件用于形成SA操作，否则该字段将被忽略。参见15.4.4"管理查询子系统"（第923页）。
+
+SubnetAdminData | 1600位 | 存储属性内容的数据字段。
+
+15.2.1.3 SA特定的ClassPortInfo:CapabilityMask位
+
+C15-0.1.7: 子网管理应（shall）按照表186"SA特定ClassPortInfo:CapabilityMask位"（第885页）中的描述进行操作。
+
+有关ClassPortInfo:CapabilityMask的总体描述，参见13.4.8.1"ClassPortInfo"（第734页）。
+
+表186 SA特定ClassPortInfo:CapabilityMask位
+
+名称 | 位 | 描述
+IsSubnetOptionalRecordsSupported | 8 | 如果此值为1，SA应（shall）支持表189"子网管理属性（摘要）"（第888页）中列为可选的所有属性，MCMemberRecord、TraceRecord和MultiPathRecord除外。此位不应（shall not）用于指示支持这些属性的子集。
+如果此值为0，SA应（shall）不支持上述任何属性和方法。
+
+IsUDMulticastSupported | 9 | 如果此值为1，SA应（shall）支持表189"子网管理属性（摘要）"（第888页）中列出的MCMemberRecord。
+
+IsMultiPathSupported | 10 | 如果此值为1，SA应（shall）支持表189"子网管理属性（摘要）"（第888页）中列出的TraceRecord和MultiPathRecord属性，以及表187"子网管理方法"（第885页）中列出的SubnAdmGetTraceTable()、SubnAdmGetMulti()和SubnAdmGetMultiResp()方法。
+
+IsReinitSupported | 11 | 如果此值为1，SM/SA应（shall）支持此端口的重新初始化，如14.4.4"节点重新初始化"（第871页）中所述。
+
+15.2.2 方法摘要
+
+表187"子网管理方法"（第885页）总结了子网管理类提供的方法。其中几种是13.4.5"管理类方法"（第721页）中描述的通用方法；有些是此类特有的。子网管理方法在15.4"操作"（第921页）中有更详细的描述。
+
+C15-0.1.8: SA应（shall）支持表187"子网管理方法"（第885页）中列出的所有方法。表中未列出的所有方法类型值均为保留值。
+
+表187 子网管理方法
+
+方法 | 类型值 | 可选/必需 | 描述
+SubnAdmGet() | 0x01 | 必需 | 请求从节点获取（读取）属性
+SubnAdmGetResp() | 0x81 | 必需 | 属性获取或设置请求的响应
+SubnAdmSet() | 0x02 | 必需 | 请求在节点中设置（写入）属性。响应者应（shall）发出SubnAdmGetResp()作为其响应。
+SubnAdmReport() | 0x06 | 必需 | 转发先前订阅的事件
+SubnAdmReportResp() | 0x86 | 必需 | 对SubAdmReport()方法的回复
+SubnAdmGetTable() | 0x12 | 必需 | 表请求
+SubnAdmGetTableResp() | 0x92 | 必需 | 表请求响应
+SubnAdmGetTraceTable() | 0x13 | 可选 | 请求路径跟踪表
+SubnAdmGetMulti() | 0x14 | 可选 | 多数据包请求
+SubnAdmGetMultiResp() | 0x94 | 可选 | 多数据包响应
+SubnAdmDelete() | 0x15 | 必需 | 请求删除属性
+SubnAdmDeleteResp() | 0x95 | 必需 | 对SubnAdmDelete()方法的响应
+
+15.2.3 子网管理状态值
+
+对于SA，类特定状态位（参见13.4.7"状态字段"，第731页）的值具有表188"SA MAD类特定状态编码"（第886页）中指定的含义。
+
+表188 SA MAD类特定状态编码
+
+名称 | 值 | 含义
+NO_ERROR | 0 | 无类特定错误
+ERR_NO_RESOURCES | 1 | 资源不足，无法完成请求。对于因资源不足而无法处理的任何SA请求，都可以返回此错误。
+ERR_REQ_INVALID | 2 | 提供的请求或更新无效。
+ERR_NO_RECORDS | 3 | 没有记录匹配查询。只能由SubnAdmGetResp()返回。永远不会为RMPP响应返回，因为有效载荷长度为零的RMPP事务是有效事务。
+ERR_TOO_MANY_RECORDS | 4 | 匹配查询的记录太多。
+ERR_REQ_INVALID_GID | 5 | SA请求中的GID无效。
+ERR_REQ_INSUFFICIENT_COMPONENTS | 6 | 请求未包含所需的组件。
+Reserved | 7-255 | 保留；接收到这些状态码中的任何一个都应（shall）被视为错误。
+
+15.2.4 属性和属性表
+
+与所有管理类相同，标准MAD头部的AttributeID组件标识每个MAD中数据的格式和语义。SA属性的格式和语义在15.2.5"属性"（第888页）中详细描述。
+
+C15-0.1.9: 对于SM发现的每个子网节点、端口和链路，SA应（shall）提供描述该节点、端口或链路状态所需的所有属性。可用的确切属性取决于实体的类型。如果SM发现节点、端口或链路不再可访问或已关闭，则描述它的属性应（shall）不再从SA提供。
+
+有一类SA属性具有与其他管理类中的属性不同的特征。此外，与其他类不同，SA可以返回属性表。本节描述这些特征和表。
+
+15.2.4.1 嵌入属性
+
+SA的一个重要功能是允许用户程序和其他实体使用GMP来获取SM已知的数据。因此，在许多情况下，SA使用的数据格式和语义实际上是SM定义的格式和语义；实际上，SM属性数据通常嵌入在SA属性中。
+
+嵌入在属性中的SM数据可以存储在SA中、存储在SM中、按需从包含它的节点获取，或以其他方式获取。对于任何属性采用哪种方式取决于实现。嵌入的SM数据的格式和语义既不由SA定义，也不在本章中描述，而是由SM定义和描述；有关该信息，请参见14.1"子网管理模型"（第794页）。
+
+15.2.4.2 记录标识符（RID）字段
+
+除了嵌入数据外，SA属性还包含标识其属性所嵌入的实体的附加信息。例如，PortInfoRecord除了SM定义的PortInfo数据本身外，还包含引用的端口所在交换机的LID以及该交换机上该端口的端口号。包含该标识信息的字段称为记录标识符字段（RID字段）。RID字段始终位于属性的开头。用于特定属性的具体RID字段取决于属性的类型。各个属性描述详细定义了每个属性的RID字段。
+
+RID字段中使用的LID实际上可能是别名的。这是因为使用LMC功能进行子网多路径（参见7.11"子网多路径"，第219页）可以将多个LID映射到同一端口。所有这些别名值都是有效的RID字段值：给定包含可用于与给定端口通信的LID的RID字段，SA必须引用有关该端口的信息。这对于查询和写入数据的方法都是如此。但是，从查询返回的属性包含基本LID。
+
+C15-0.1.10: 可用于将数据包路由到端口的任何LID都可以在查询中用作RID中的LID组件，并应（shall）标识它所路由到的端口。
+
+C15-0.1.11: 查询响应在RID的任何LID组件中应（shall）包含端口的基本LID。
+
+15.2.4.3 表
+
+传输到子网管理或从子网管理传输的属性集合称为表。这些表由单一类型的属性组成，例如NodeRecord。
+
+15.2.5 属性
+
+本节首先提供所有SA属性的摘要，然后列出每个属性的数据格式，并在必要时提供描述。
+
+15.2.5.1 属性摘要
+
+C15-0.1.12: SA应（shall）支持表189"子网管理属性（摘要）"（第888页）和表190"子网管理属性/方法映射"（第890页）中分别列为必需的属性和方法。表189"子网管理属性（摘要）"中未列出的所有属性ID均为保留值。
+
+表189 子网管理属性（摘要）
+
+属性名称 | 属性ID | 可选/必需 | 嵌入属性 | 描述
+ClassPortInfo | 0x0001 | 必需 | 否 | 类信息。参见13.4.8.1"ClassPortInfo"（第734页）
+Notice | 0x0002 | 必需 | 否 | 通知信息。参见13.4.8.2"Notice"（第737页）
+InformInfo | 0x0003 | 必需 | 否 | 订阅（通知）信息。参见13.4.8.3"InformInfo"（第739页）
+NodeRecord | 0x0011 | 必需 | 是 | NodeInfo的容器。参见15.2.5.2"NodeRecord"（第891页）
+PortInfoRecord | 0x0012 | 必需 | 是 | PortInfo的容器。参见15.2.5.3"PortInfoRecord"（第891页）
+SLtoVLMappingTableRecord | 0x0013 | 必需 | 是 | SLtoVLMappingTable条目的容器。参见15.2.5.4"SLtoVLMappingTableRecord"（第892页）
+SwitchInfoRecord | 0x0014 | 可选 | 是 | SwitchInfo的容器。参见15.2.5.5"SwitchInfoRecord"（第892页）
+LinearForwardingTableRecord | 0x0015 | 可选 | 是 | LinearForwardingTable条目的容器。参见15.2.5.6"LinearForwardingTableRecord"（第892页）
+RandomForwardingTableRecord | 0x0016 | 可选 | 是 | RandomForwardingTable条目的容器。参见15.2.5.7"RandomForwardingTableRecord"（第893页）
+MulticastForwardingTableRecord | 0x0017 | 可选 | 是 | MulticastForwardingTable条目的容器。参见15.2.5.8"MulticastForwardingTableRecord"（第893页）
+SMInfoRecord | 0x0018 | 可选 | 是 | SMInfo的容器。参见15.2.5.10"SMInfoRecord"（第894页）
+InformInfoRecord | 0x00F3 | 可选 | 是 | InformInfo的容器。参见15.2.5.12"InformInfoRecord"（第894页）
+LinkRecord | 0x0020 | 可选 | 否 | 节点间链路信息。参见15.2.5.13"LinkRecord"（第895页）
+GuidInfoRecord | 0x0030 | 可选 | 是 | 端口GUIDInfo的容器。参见15.2.5.18"GuidInfoRecord"（第916页）
+ServiceRecord | 0x0031 | 必需 | 否 | 已通告服务的信息。参见15.2.5.14"ServiceRecord"（第895页）
+P_KeyTableRecord | 0x0033 | 必需 | 是 | P_Key表的容器。参见15.2.5.11"P_KeyTableRecord"（第894页）
+PathRecord | 0x0035 | 必需 | 否 | 通过子网的路径信息。参见15.2.5.16"PathRecord"（第899页）
+VLArbitrationTableRecord | 0x0036 | 必需 | 是 | VLArbitrationTable条目的容器。参见15.2.5.9"VLArbitrationTableRecord"（第893页）
+MCMemberRecord | 0x0038 | 可选 | 否 | 多播成员属性。参见15.2.5.17"MCMemberRecord"（第908页）
+TraceRecord | 0x0039 | 可选 | 否 | 路径跟踪信息。参见15.2.5.19"TraceRecord"（第916页）
+MultiPathRecord | 0x003A | 可选 | 否 | 多路径请求。参见15.2.5.20"MultiPathRecord"（第917页）
+ServiceAssociationRecord | 0x003B | 可选 | 否 | ServiceRecord ServiceName/ServiceKey关联。参见15.2.5.15"ServiceAssociationRecord"（第899页）
+
+来自公共头部的AttributeModifier（参见表112"公共MAD字段"，第719页）不与任何子网管理属性一起使用。
+
+表190"子网管理属性/方法映射"（第890页）将SA属性与方法关联。
+
+表190 子网管理属性/方法映射
+
+属性 | Get | Set | Report | GetTable | GetTraceTable | GetMulti | Delete
+ClassPortInfo | X | | | | | |
+Notice | | | X | | | |
+InformInfo | | X | | | | |
+NodeRecord | X | | | X | | |
+PortInfoRecord | X | | | X | | |
+SLtoVLMappingTableRecord | X | | | X | | |
+SwitchInfoRecord | X | | | X | | |
+LinearForwardingTableRecord | X | | | X | | |
+RandomForwardingTableRecord | X | | | X | | |
+MulticastForwardingTableRecord | X | | | X | | |
+VLArbitrationTableRecord | X | | | X | | |
+SMInfoRecord | X | | | X | | |
+InformInfoRecord | X | | | X | | |
+LinkRecord | X | | | X | | |
+GUIDInfoRecord | X | | | X | | |
+ServiceRecord | X | X | | X | | | X
+P_KeyTableRecord | X | | | X | | |
+PathRecord | X | | | X | | |
+MCMemberRecord | X | X | | X | | | X
+TraceRecord（注a）| | | | | X | |
+MultiPathRecord | | | | | | X |
+ServiceAssociationRecord | X | | | X | | |
+
+注a：TraceRecord仅在SubnAdmGetTableResp()中返回，参见15.4.9"SubnAdmGetTraceTable()：跟踪路径"（第928页）。
+
+SA特定属性的详细布局如下。作为子网管理属性容器的属性除了其布局外几乎不需要描述；其他属性有更详细的描述。
+
+15.2.5.2 NodeRecord
+
+每个子网上的每个终端端口都有一个NodeRecord。
+
+注意：如果通道适配器或路由器在同一子网上有多个端口，则该节点在该子网上将有多个NodeRecord可从SA获取，每个可能的NodeInfo PortGUID值对应一个。
+
+表191 NodeRecord
+
+组件 | 长度(位) | 偏移(位) | 描述
+RID LID | 16 | 0 | 对于CA或路由器：端口的LID。对于交换机：交换机端口0的LID。
+Reserved | 16 | 16 | 保留
+NodeInfo | 320 | 32 | NodeInfo属性内容；参见表141"NodeInfo"（第818页）
+NodeDescription | 512 | 352 | NodeDescription属性内容；参见表140"NodeDescription"（第818页）
+
+15.2.5.3 PortInfoRecord
+
+表192 PortInfoRecord
+
+组件 | 长度(位) | 偏移(位) | 描述
+RID EndportLID | 16 | 0 | 对于CA或路由器：端口的LID。对于交换机：交换机端口0的LID。
+PortNum | 8 | 16 | 对于交换机：端口号。对于通道适配器或路由器：保留
+Reserved | 8 | 24 | 保留
+PortInfo | 432 | 32 | PortInfo属性内容；参见表145"PortInfo"（第822页）
+
+15.2.5.4 SLtoVLMappingTableRecord
+
+表193 SLtoVLMappingTableRecord
+
+组件 | 长度(位) | 偏移(位) | 描述
+RID LID | 16 | 0 | 对于CA或路由器：端口的LID。对于交换机：交换机端口0的LID。
+InputPortNum | 8 | 16 | 对于交换机：输入端口号。对于通道适配器或路由器：保留
+OutputPortNum | 8 | 24 | 对于交换机：输出端口号。对于通道适配器或路由器：保留
+Reserved | 32 | 32 | 保留
+SLtoVLMappingTable | 64 | 64 | SLtoVLMappingTable属性内容；参见表149"SLtoVLMappingTable"（第835页）
+
+15.2.5.5 SwitchInfoRecord
+
+表194 SwitchInfoRecord
+
+组件 | 长度(位) | 偏移(位) | 描述
+RID LID | 16 | 0 | 交换机端口0的LID
+Reserved | 16 | 16 | 保留
+SwitchInfo | 136 | 32 | SwitchInfo属性内容；参见表142"SwitchInfo"（第819页）
+
+15.2.5.6 LinearForwardingTableRecord
+
+表195 LinearForwardingTableRecord
+
+组件 | 长度(位) | 偏移(位) | 描述
+RID LID | 16 | 0 | 交换机端口0的LID
+BlockNum | 16 | 16 | LinearForwardingTable块号
+Reserved | 32 | 32 | 保留
+LinearForwardingTable | 512 | 64 | 第BlockNum号LinearForwardingTable块的内容；参见表152"LinearForwardingTable"（第837页）
+
+15.2.5.7 RandomForwardingTableRecord
+
+表196 RandomForwardingTableRecord
+
+组件 | 长度(位) | 偏移(位) | 描述
+RID LID | 16 | 0 | 交换机端口0的LID
+BlockNum | 16 | 16 | RandomForwardingTable块号；参见表155"LID/端口块元素"（第838页）
+Reserved | 32 | 32 | 保留
+RandomForwardingTable | 512 | 64 | 第BlockNum号RandomForwardingTable块的内容；参见表154"RandomForwardingTable"（第838页）
+
+15.2.5.8 MulticastForwardingTableRecord
+
+表197 MulticastForwardingTableRecord
+
+组件 | 长度(位) | 偏移(位) | 描述
+RID LID | 16 | 0 | 交换机端口0的LID
+Position | 4 | 16 | 此属性的Position字段，如14.2.5.12"MulticastForwardingTable"（第838页）中所定义。
+Reserved | 3 | 20 | 保留。
+BlockNum | 9 | 23 | 指向此属性的32个PortMask条目块的指针。参见14.2.5.12"MulticastForwardingTable"（第838页）
+Reserved | 32 | 32 | 保留
+MulticastForwardingTable | 512 | 64 | 由BlockNum和Position标识的MulticastForwardingTable块的内容；参见表156"MulticastForwardingTable"（第839页）
+
+15.2.5.9 VLArbitrationTableRecord
+
+表198 VLArbitrationTableRecord
+
+组件 | 长度(位) | 偏移(位) | 描述
+RID LID | 16 | 0 | 对于CA或路由器：端口的LID。对于交换机：交换机端口0的LID。
+OutputPortNum | 8 | 16 | 对于交换机：输出端口号。对于通道适配器或路由器：保留
+BlockNum | 8 | 24 | VL/Weight块号；参见表151"VL/Weight块元素"（第837页）
+Reserved | 32 | 32 | 保留
+VLArbitrationTable | 512 | 64 | 第BlockNum号VLArbitrationTable块的内容；参见表150"VLArbitrationTable"（第837页）
+
+15.2.5.10 SMInfoRecord
+
+表199 SMInfoRecord
+
+组件 | 长度(位) | 偏移(位) | 描述
+RID LID | 16 | 0 | 端口的LID
+Reserved | 16 | 16 | 保留
+SMInfo | 168 | 32 | SMInfo属性内容；参见表158"SMInfo"（第840页）
+
+15.2.5.11 P_KeyTableRecord
+
+表200 P_KeyTableRecord
+
+组件 | 长度(位) | 偏移(位) | 描述
+RID LID | 16 | 0 | 对于CA或路由器：端口的LID。对于交换机：交换机端口0的LID。
+BlockNum | 16 | 16 | P_Key表块号
+PortNum | 8 | 32 | 对于交换机：端口号。对于CA或路由器：保留
+Reserved | 24 | 40 | 保留
+P_Key Table | 512 | 64 | 第BlockNum号P_KeyTable块的内容；参见表147"P_KeyTable"（第835页）
+
+15.2.5.12 InformInfoRecord
+
+表201 InformInfoRecord
+
+组件 | 长度(位) | 偏移(位) | 描述
+RID SubscriberGID | 128 | 0 | 订阅者端口的GID
+Enum | 16 | 128 | 在通过端口请求的所有订阅中唯一的标识符
+Reserved | 48 | 144 | 保留
+InformInfo | 288 | 192 | InformInfo属性内容；参见表119"InformInfo"（第739页）
+
+15.2.5.13 LinkRecord
+
+LinkRecord由SA合成，用作为需要此类数据的管理实体提供拓扑数据。它旨在标识特定端口对之间的物理链路。LinkRecord的"From"侧指的是链路出发的位置，"To"侧指的是链路到达的位置。请注意，由于链路是双向的，子网中的每条链路将合成两个LinkRecord。
+
+表202 LinkRecord
+
+组件 | 长度(位) | 偏移(位) | 描述
+RID FromLID | 16 | 0 | 对于CA或路由器：通过链路连接到另一端口的端口的LID。对于交换机：端口号为FromPort的交换机端口0的LID，该端口通过链路连接到另一端口。
+FromPort | 8 | 16 | 对于CA或路由器：0。对于交换机：端口号（非端口0）
+ToPort | 8 | 24 | 如果FromLID/FromPort指定的端口通过链路连接到：
+• CA或路由器端口：ToPort为0
+• 交换机端口：ToPort是该交换机端口的端口号
+ToLID | 16 | 32 | 如果FromLID/FromPort指定的端口通过链路连接到：
+• CA或路由器端口：ToLID是该CA或路由器端口的LID
+• 交换机端口：ToLID是该交换机端口0的LID
+
+15.2.5.14 ServiceRecord
+
+表203 ServiceRecord
+
+组件 | 长度(位) | 偏移(位) | 描述
+RID ServiceID | 64 | 0 | ServiceGID指定的端口上的服务标识符
+ServiceGID | 128 | 64 | 服务的端口GID。
+ServiceP_Key | 16 | 192 | 联系服务时使用的P_Key。
+Reserved | 16 | 208 | 为对齐而保留。
+ServiceLease | 32 | 224 | 此服务剩余的租约期，以秒为单位。0xFFFFFFFF为无限期租约。
+ServiceKey | 128 | 256 | 可能与ServiceName关联的密钥值；参见后续讨论。
+ServiceName | 512 | 384 | UTF-8编码的、以null终止的字符串，用于标识服务（例如"BIS.IBTA"）。
+ServiceData8.1 … ServiceData8.16 | 8×16=128 | 896 | 此ServiceRecord的数据；内容对SA不透明。每字节一个ComponentMask位。参见讨论。
+ServiceData16.1 … ServiceData16.8 | 16×8=128 | 1024 | 此ServiceRecord的数据；内容对SA不透明。每16位一个ComponentMask位。参见讨论。
+ServiceData32.1 … ServiceData32.4 | 32×4=128 | 1152 | 此ServiceRecord的数据；内容对SA不透明。每32位一个ComponentMask位。参见讨论。
+ServiceData64.1 … ServiceData64.2 | 64×2=128 | 1280 | 此ServiceRecord的数据；内容对SA不透明。每64位一个ComponentMask位。参见讨论。
+
+ServiceRecord提供了基本服务的第一级或"引导"通告，这些服务在查询SA之前无法找到。这些可以是诸如引导服务或名称服务之类的服务。定义事件（陷阱号）的管理器应创建ServiceRecord，以便希望订阅其事件的实体可以找到它们。ServiceRecord不旨在替代完整功能的、高度可扩展的网络目录服务。
+
+15.2.5.14.1 Service P_Key
+
+ServiceP_Key是可用于联系服务的P_Key。按照15.4.1.2"其他属性的访问限制"（第922页）的要求，SA仅向请求端口返回其ServiceP_Key与该端口P_Key表中的条目匹配的ServiceRecord。
+
+C15-0.1.13: SA应（shall）拒绝任何尝试创建、修改或删除ServiceRecord的请求，如果该ServiceRecord中的ServiceP_Key不在由ServiceGID标识的端口和发出请求的端口的P_Key表中都存在。
+
+15.2.5.14.2 Service Key
+
+ServiceKey可用于允许验证使用选定ServiceName创建、替换和删除ServiceRecord。
+
+C15-0.1.14: SA应（shall）提供将ServiceName与ServiceKey关联的方法。
+
+此关联是供应商特定的。实现可能在以下方面有所不同：如何创建和维护关联；SA可以保存多少不同的关联；ServiceName是否可以与多个ServiceKey关联；不同的ServiceName是否可以有相同的ServiceKey等。可以使用ServiceAssociationRecord检索{ServiceName, ServiceKey}关联的集合（但不能使用SubnAdmSet()）；参见15.2.5.15"ServiceAssociationRecord"（第899页）。
+
+C15-0.1.15: 对SubnAdmSet(ServiceRecord)或SubnAdmDelete(ServiceRecord)的请求应（shall）按照以下描述的过程执行。在下文中，Ns是MAD中提供的属性中的ServiceName，Ks是ServiceKey，Rs是RID。在所有情况下，假定ComponentMask已适当设置。
+
+1) 如果不存在ServiceName=Ns的{ServiceName, ServiceKey}关联，则忽略Ks并执行请求的操作，即：
+a) 如果方法是SubnAdmDelete()，则：
+   i) 如果存在RID匹配Rs的存储ServiceRecord，则删除该存储的ServiceRecord。
+   ii) 否则拒绝该操作。
+b) 如果方法是SubnAdmSet()，则：
+   i) 如果存在RID匹配Rs的存储ServiceRecord，则用提供的ServiceRecord替换该存储的ServiceRecord。
+   ii) 否则添加提供的ServiceRecord。
+
+2) 否则，如果Ks不等于与Ns关联的任何ServiceKey，即不存在{Ns, Ks}关联，则拒绝该操作。
+
+• 注意，通过了步骤2意味着在步骤3和4中，已知存在{Ns, Ks}关联。
+
+3) 如果方法是SubnAdmSet()，则：
+a) 如果没有RID匹配Rs的存储ServiceRecord，则添加提供的ServiceRecord。
+b) 如果存在RID匹配Rs且ServiceKey匹配Ks的存储ServiceRecord，则用提供的ServiceRecord替换该存储的ServiceRecord。
+c) 否则，拒绝该操作。
+
+4) 如果方法是SubnAdmDelete()，则：
+a) 如果存在RID匹配Rs且ServiceKey匹配Ks的存储ServiceRecord，则删除该ServiceRecord。
+b) 否则，拒绝该操作。
+
+C15-0.1.15的一个含义是：添加、删除或替换ServiceRecord的请求，无论是否成功，对关联没有影响。SubnAdmSet()和SubnAdmDelete()不会更改哪些ServiceName与ServiceKey关联，也不会更改特定的ServiceName是否与特定的ServiceKey关联。特别是，添加具有先前未关联的ServiceName的ServiceRecord不会创建新的关联。当没有与ServiceName的关联时，ServiceKey始终被忽略。
+
+ServiceRecord的查询（例如使用SubnAdmGet()或SubnAdmGetTable()方法）像任何其他组件一样匹配ServiceKey。预期大多数查询将使用ComponentMask来通配ServiceKey。
+
+如15.4.1.2"其他属性的访问限制"（第922页）中所指定，SA在返回ServiceRecord时将ServiceKey替换为0，除非响应受信任的子网管理器。
+
+15.2.5.14.3 Service Lease
+
+长期或无限期的ServiceLease值可能跨越包括子网重新初始化（包括SA重新初始化）在内的时间段。此类ServiceRecord是否是非易失性的（即重新初始化的SA是否以这些ServiceRecord就位开始）取决于供应商。
+
+SA可以强制执行最大ServiceLease。即，它可以拒绝写入ServiceLease期为无限期或大于某个量的ServiceRecord的尝试。是否这样做以及如何确定最大值取决于供应商。
+
+C15-0.1.16: SA应（shall）在创建或修改ServiceRecord时立即开始倒计时每个非无限期的ServiceLease期。在ServiceRecord查询中返回的ServiceLease值应（shall）为其ServiceLease中的剩余时间。
+
+C15-0.1.17: 当ServiceRecord的ServiceLease期到期时，SA应（shall）删除该ServiceRecord。
+
+15.2.5.14.4 Service Data
+
+ServiceData8.1到ServiceData64.2组件共同构成一个64字节的区域，可以在其中放置任何数据。它旨在成为服务向其客户端提供一些初始数据的便捷方式。
+
+此外，这个64字节区域被正式分为共30个组件——16个8位组件、然后8个16位组件等——从而为数据的不同大小的段分配ComponentMask位。这允许使用匹配ServiceData部分的查询操作，例如，使ServiceData的服务特定部分能够作为ServiceName的二进制编码扩展来进行查找。
+
+由于将ServiceData分解为组件是纯粹形式上的（没有语义适用）；并且由于在查询中执行的匹配是简单的按位匹配；因此相邻的ServiceData形式组件实际上可以被任意连接成较大的实体（如果方便的话）。例如，要用于匹配的32位二进制值可以占据ServiceData的前四个字节（组件ServiceData8.1到ServiceData8.4）。可以通过将ComponentMask中对应于前四个形式ServiceData组件的前四位设置为1来对其进行匹配。执行查找的客户端当然必须了解其请求的服务如何使用这些组件。
+
+15.2.5.15 ServiceAssociationRecord
+
+此属性不能使用SubnAdmSet()修改。其目的是允许另一供应商的SA通过使用ComponentMask全为零的SubnAdmGetTable(ServiceAssociationRecord)来获取当前存储在SA中的所有{ServiceName, ServiceKey}关联。
+
+表204 ServiceAssociationRecord
+
+组件 | 长度(位) | 偏移(位) | 描述
+ServiceKey | 128 | 0 | 可能与ServiceName关联的密钥值；参见后续讨论。
+ServiceName | 512 | 128 | UTF-8编码的、以null终止的字符串，用于标识服务（例如"BIS.IBTA"）。
+
+15.2.5.16 PathRecord
+
+表205 PathRecord
+
+组件 | 长度(位) | 偏移(位) | GetTable请求必需 | 描述
+Reserved | 32 | 0 | | 保留
+Reserved | 32 | 32 | | 对齐偏移
+DGID | 128 | 64 | | 要建立路径的目的GID
+SGID | 128 | 192 | X | 要建立路径的源GID；应（shall）为单播GID
+DLID | 16 | 320 | | 目的LID
+SLID | 16 | 336 | | 源LID；应（shall）为单播LID
+RawTraffic | 1 | 352 | | 原始数据包路径：0 - IB数据包（P_Key必须有效），1 - 原始数据包流量（无P_Key）
+Reserved | 3 | 353 | | 保留
+FlowLabel | 20 | 356 | | 流标签
+HopLimit | 8 | 376 | | 跳数限制
+TClass | 8 | 384 | | 流量类
+Reversible | 1 | 392 | | 在查询请求中：1表示需要可逆路径（参见13.5.4"响应生成和可逆路径"，第768页）；0表示不要求可逆性。在查询响应中：1表示路径可逆；0表示路径不可逆。
+NumbPath | 7 | 393 | X | 在查询请求中：对于每个唯一的SGID-DGID组合，返回的最大路径数。如果对于给定的SGID-DGID组合存在更多满足PathRecord查询的路径，则只应（shall）返回NumbPath条路径（实现定义）。在查询响应中：未定义。
+P_Key | 16 | 400 | | 此路径的分区密钥
+Reserved | 12 | 416 | | 保留
+SL | 4 | 428 | | 服务级别
+MtuSelector | 2 | 432 | | 在查询请求中：3-可用的最大MTU。如果指定了MTU（即MTU的ComponentMask位为1）：0-大于指定的MTU，1-小于指定的MTU，2-恰好是指定的MTU。否则，此组件在查询请求中被忽略。在查询响应中：值应（shall）为2，表示路径恰好具有指定的MTU。
+Mtu | 6 | 434 | | 所需MTU的枚举：1: 256, 2: 512, 3: 1024, 4: 2048, 5: 4096, 0,6-63: 保留。在查询请求中，如果未指定MtuSelector（即MtuSelector的ComponentMask位为0）或指定了但值为3，则忽略此组件。
+RateSelector | 2 | 440 | | 在查询请求中：3-可用的最大速率。如果指定了Rate（即Rate的ComponentMask位为1）：0-大于指定的速率，1-小于指定的速率，2-恰好是指定的速率。否则，此组件在查询请求中被忽略。在查询响应中：值应（shall）为2，表示路径恰好具有指定的速率。
+Rate | 6 | 442 | | 速率枚举：2: 2.5 Gb/sec, 3: 10 Gb/sec, 4: 30 Gb/sec, 5: 5 Gb/sec, 6: 20 Gb/sec, 7: 40 Gb/sec, 8: 60 Gb/sec, 9: 80 Gb/sec, 10: 120 Gb/sec, 0,1,11-63: 保留。在查询请求中，如果未指定RateSelector（即RateSelector的ComponentMask位为0）或指定了但值为3，则忽略此组件。SA应（shall）仅向终端端口返回该终端端口可以支持的PathRecord:Rate值（由该终端端口的PortInfo组件LinkSpeedSupported和LinkWidthSupported中提供的值指示），除非PortInfo:IsOptionalIPDSupported=1；在后一种情况下，可以返回任何速率值。
+PacketLifeTimeSelector | 2 | 448 | | 在查询请求中：3-可用的最小PacketLifeTime。如果指定了PacketLifeTime（即PacketLifeTime的ComponentMask位为1）：0-大于指定的PacketLifeTime，1-小于指定的PacketLifeTime，2-恰好是指定的PacketLifeTime。否则，此组件在查询请求中被忽略。在查询响应中：值应（shall）为2，表示路径恰好具有指定的PacketLifeTime。
+PacketLifeTime | 6 | 450 | | 数据包穿越此路径的最大时间，其中时间（微秒）由 time = 4.096 µsec × 2^PacketLifeTime 得出。在查询请求中，如果未指定PacketLifeTimeSelector（即PacketLifeTimeSelector的ComponentMask位为0）或指定了但值为3，则忽略此组件。对于环回路径，应（shall）为零。
+Preference | 8 | 456 | | 在包含多条路径的响应中：指示返回的路径之间的优先顺序，该顺序优先于MTU、Rate和/或PacketLifetime可能指示的差异。较大的数字表示较差的路径。相同的数字表示除PathRecord其他字段可能清楚表明的之外，路径之间没有优先级。此字段的精确含义及其所基于的特征取决于实现。
+Reserved | 48 | 464 | | 保留
+
+PathRecord用于请求终端节点之间的路由信息。其结果是创建连接和执行其他任务所必需的。PathRecord中返回的数据通常是根据SM使用的路由算法生成的。
+
+对于单播通信，如果以下所有条件成立，则存在指定从SGID A到DGID B路径的PathRecord：
+• 存在从端口A到端口B的LID路由路径，
+• 端口A的PortInfo:PortState为Active，
+• 从端口A到端口B路径中所有中间交换机和路由器端口的PortInfo:PortState为Armed或Active，并且
+• 端口B的PortInfo:PortState为Armed或Active。
+
+对于多播通信，如果端口A的PortInfo:PortState为Active，并且端口A属于MGID为B的多播组，则存在指定从SGID A到MGID（多播GID）B路径的PathRecord。
+
+PathRecord的请求者可以使用管理查询子系统（15.4.4"管理查询子系统"，第923页）来请求具有所需属性的路径。使用ComponentMask，请求者可以构建SubnAdmGetTable()请求并在属性中提供已知字段；SA的回复将提供与请求匹配的响应条目。例如，通过设置ComponentMask使除SGID和DGID外的所有内容都被忽略，SubnAdmGetTable()将返回从SLID到DLID的所有路径的PathRecord。通过有选择地指定所需的特性，可以请求具有任何给定特性的路径。
+
+在计算终止于基本交换机端口0的路径的PMTU、SL和速率时，该基本交换机端口0的PortInfo组件被忽略。
+
+请求从端口到自身的PathRecord是合法的。这种"环回"PathRecord对于诊断目的以及同一终端节点上客户端之间的正常流量都很有用。SA处理此类查询就像端口通过点对点链路连接到具有相同功能的另一个端口一样。这意味着某些特性（例如NeighborMTU）可能被隐式更改；这是可行的，因为环回流量永远不会到达物理链路。
+
+通常DGID是已知的（或在某个时刻得知的，例如通过名称服务）。但在"引导"序列期间，不指定它可能很有用，从而返回从SGID可达的所有终端节点的路径。
+
+等效于操作系统的"总线遍历"操作（用于找出哪些设备插槽被占用）可以使用单个PathRecord查询来完成。例如，考虑一个SubnAdmGetTable(PathRecord)查询，其中：
+• SGID设置为某个端口的GID
+• NumbPath设置为1
+• ComponentMask全为0，除了SGID和NumbPath位置为1。
+
+则SA将返回一个表，包含从SGID标识的物理端口到该SGID端口可达的每个物理端口的路径（给定查询时实施的分区）（参见15.4.1"访问限制"，第921页）。可能返回到每个物理目的端口的多条路径：如果其PortInfo:GUIDCap大于1，则每个物理目的端口可能有多个GUID，每个GUID定义一个单独的GID。
+
+由于NumbPath=1，并且定义为连接每个SGID和DGID的路径数，因此即使SGID端口和DGID端口都有多个LID（即它们的LMC值不为0），也只会返回到每个可达DGID的一条路径。
+
+PathRecord查询的ComponentMask匹配涉及15.4.4中指定的匹配机制的几个例外。有关在查询请求中使用NumbPath、MtuSelector/Mtu、RateSelector/Rate和PacketLifeTimeSelector/PacketLifeTime的详细信息，请参阅表205"PathRecord"（第899页）中的描述。
+
+15.2.5.17 MCMemberRecord
+
+表210 MCMemberRecord
+
+组件 | 长度(位) | 偏移(位) | 描述
+RID MGID | 128 | 0 | 此多播组的多播GID地址。参见下面的讨论。
+PortGID | 128 | 128 | 加入此多播组的终端端口的有效GID。
+Q_Key | 32 | 256 | 此多播组使用的Q_Key。
+MLID | 16 | 288 | 此多播组的多播LID，由SA在创建时分配。
+MTUSelector | 2 | 304 | 语义与PathRecord组件MtuSelector（第900页）相同
+MTU | 6 | 306 | 语义与PathRecord组件Mtu（第901页）相同
+TClass | 8 | 312 | 语义与PathRecord组件TClass（第900页）相同
+P_Key | 16 | 320 | 此多播组的分区密钥。此分区密钥应（shall）指示完全成员资格（参见10.9.1.1"有限和完全成员资格"，第524页）。多播组的所有成员都应（shall）在此分区密钥所指示的分区中具有完全成员资格。
+RateSelector | 2 | 336 | 语义与PathRecord组件RateSelector（第901页）相同
+Rate | 6 | 338 | 语义与PathRecord组件Rate（第901页）相同
+PacketLifeTimeSelector | 2 | 344 | 语义与PathRecord组件PacketLifeTimeSelector（第902页）相同
+PacketLifeTime | 6 | 346 | 数据包在多播组内穿越路径的最大估计时间。
+SL | 4 | 352 | 语义与PathRecord组件SL（第900页）相同
+FlowLabel | 20 | 356 | 语义与PathRecord组件FlowLabel（第900页）相同
+HopLimit | 8 | 376 | 语义与PathRecord组件HopLimit（第900页）相同
+Scope | 4 | 384 | 语义与MGID地址范围（表3"多播地址范围"，第146页）相同。参见下面的讨论。
+JoinState | 4 | 388 | 端口请求的加入/离开状态。参见下面的讨论。
+bit 0: FullMember: 将此终端端口作为成员发送者和接收者包含到/从多播组中删除。
+bit 1: NonMember: 将此终端端口作为非成员发送者和接收者包含到/从多播组中删除。
+bit 2: SendOnlyNonMember: 将此终端端口作为仅发送的非成员包含到/从多播组中删除。
+bit 3: 保留
+ProxyJoin | 1 | 392 | 代理加入：由SA计算。在SubnAdmSet()中被忽略，并且始终返回为零，除非是受信任请求的情况（参见15.4.1.2"其他属性的访问限制"，第922页）。
+• 0: 加入由PortGID标识的终端端口执行。
+• 1: 加入由同一分区内的另一端口代表PortGID标识的终端端口执行。
+Reserved | 23 | 393 | 保留
+
+注意：本版本的规范不提供原始多播的管理支持。
+
+SubnAdmSet()方法用于创建或加入多播组。SubnAdmDelete()方法用于删除或离开多播组。
+
+o15-0.1.1: 如果SA支持UD多播，则导致端口被添加到多播组的SubnAdmSet(MCMemberRecord)意味着SM应（shall）用新的多播信息对路由器和交换机进行编程。如果SM无法用新的多播信息对结构进行编程，SA应（shall）在其对相应SubnAdmSet()方法的响应中返回ERR_NO_RESOURCES的错误状态。
+
+ProxyJoin组件由SA用于跟踪PortGID指定端口以外的端口对多播组的加入请求，并确保只有分区内的端口才能删除PortGID指定端口的MCMemberRecord，且仅在它是代理加入的情况下。在非代理加入的情况下，SA仅允许PortGID指定的端口请求删除。
+
+o15-0.2.1: 如果SA支持UD多播，则如果SA收到将修改现有MCMemberRecord的SubnAdmSet()或SubnAdmDelete()方法，SA不应（shall not）修改该MCMemberRecord，并应（shall）在以下情况下在响应中返回ERR_REQ_INVALID的错误状态：
+• 保存的MCMemberRecord.ProxyJoin未设置，并且请求由GID不是PortGID的请求者发出。
+• 保存的MCMemberRecord.ProxyJoin已设置，并且请求者不是该MCMemberRecord分区的成员。
+
+o15-0.1.3: 如果SA支持UD多播，则如果SA收到不含以下指定必需组件的SubnAdmSet()或SubnAdmDelete()方法，SA应（shall）在其响应中返回ERR_REQ_INSUFFICIENT_COMPONENTS的错误状态。确切需要哪些组件取决于请求的类型。
+
+在15.2.5.17.2"创建多播组"（第912页）和15.2.5.17.3"加入多播组"（第913页）中，使用了术语"不可实现"。"不可实现"意味着请求的多播组创建或加入是不可能的，因为请求指定的属性在给定子网的硬件配置下在物理上无法实现。例如，创建MTU或Rate大于子网中任何地方支持的值的组是不可实现的，PacketLifeTime短于在子网中任何终端节点之间传递数据包所需时间的组也是不可实现的。类似地，如果没有到达加入端口的路径能够支持多播组的MTU、Rate等，则加入请求也是不可实现的。
+
+15.2.5.17.1 组成员资格
+
+终端端口必须指定它想要的多播订阅或删除类型。MCMemberRecord:JoinState组件指示端口希望添加（在加入或创建组时）或删除（在离开组时）的成员资格特性。MCMemberRecord:JoinState位的含义如下：
+
+• FullMember: 组消息被路由到端口和从端口路由。该端口被视为组创建和删除目的的成员，即：如果没有FullMember=1的成员端口存在，则可以删除该组；否则不可以。
+
+• NonMember: 组消息被路由到端口和从端口路由。该端口不被视为组创建/删除目的的成员。
+
+• SendOnlyNonMember: 组消息仅从端口路由；没有消息路由到端口。该端口不被视为组创建/删除目的的成员。
+
+MCMemberRecord:JoinState位的任何组合都可以为1。当多个位为1时，端口成员资格类型的特性是位为1所指定的特性的并集。例如，如果MCMemberRecord:JoinState.FullMember和MCMemberRecord:JoinState.NonMember中的一个或两个为1，则无论MCMemberRecord:JoinState.SendOnlyNonMember的值如何，组消息都会被路由到端口和从端口路由；如果MCMemberRecord:JoinState.FullMember为1，则无论MCMemberRecord:JoinState.NonMember或MCMemberRecord:JoinState.SendOnlyNonMember的设置如何，该端口都被视为创建/删除目的的成员。
+
+MCMemberRecord:JoinState.FullMember位在创建多播组的SubnAdmSet()请求中必须设置为1。引用该多播组的后续加入或离开请求可以包含MCMemberRecord:JoinState位的任何组合。当SA收到与已存在的MCMemberRecord具有相同RID的加入请求时，SA将MCMemberRecord的MCMemberRecord:JoinState组件更新为请求中的MCMemberRecord:JoinState与为该MCMemberRecord维护的当前JoinState的逻辑OR。当SA收到离开请求时，它将引用的MCMemberRecord的MCMemberRecord:JoinState组件更新为MCMemberRecord当前的MCMemberRecord:JoinState与请求中MCMemberRecord:JoinState的逻辑NOT的逻辑AND。如果此离开请求导致没有MCMemberRecord中MCMemberRecord:JoinState.FullMember位被设置的多播组，则SM/SA可以删除该多播组。
+
+15.2.5.17.2 创建多播组
+
+o15-0.2.2: 如果SA支持UD多播，则如果SA收到MGID设置为0且MCMemberRecord:JoinState.FullMember位设置为1的MCMemberRecord的SubnAdmSet()方法，SA应（shall）创建多播组。创建组所需的MCMemberRecord中的必需组件为P_Key、Q_Key、SL、FlowLabel、TClass、JoinState和PortGID（参见o15-0.1.3:），ComponentMask中相应的位被设置。所有其他组件可以被通配。这将导致PortGID指定的端口的隐式加入。
+
+o15-0.1.5: 如果SA支持UD多播，则如果SA收到MGID设置为0的创建多播组请求，它创建的MGID应（shall）为以下格式：
+
+图196 SA创建的多播GID格式
+0xFF1 | Scope | 0xA01B | 64位GID前缀 | 32位子网唯一ID | 16位签名
+
+其中Scope位由客户端在MCMemberRecord:Scope组件中提供，32位子网唯一ID由SA选择，使得SA生成的MGID在所使用的范围内的任何给定时间存在的多播组中应（shall）是唯一的。如果多播组创建者未提供Scope组件，SA应（shall）选择具有GID前缀允许的最广泛可能范围的MGID范围位。
+
+o15-0.2.3: 如果SA支持UD多播，则如果SA收到指定了有效MGID、不存在具有该MGID的多播组且MCMemberRecord:JoinState.FullMember位设置为1的MCMemberRecord的SubnAdmSet()方法，SA应（shall）创建多播组。创建组所需的MCMemberRecord中的必需组件应（shall）为P_Key、Q_Key、SL、FlowLabel、TClass、JoinState和PortGID（参见o15-0.1.3:），ComponentMask中相应的位被设置。所有其他组件可以被通配。这将导致PortGID指定的端口的隐式加入。在这种情况下，Scope组件被忽略。
+
+多播GID在以下情况下被视为无效：
+• 它不符合4.1.1"GID使用和属性"（第143页）中指定的规则
+• 它包含"0xA01B"的SA特定签名，并且设置了链路本地范围位。
+
+对于非本地子网，可能会出现其他无效情况，并可能在规范的未来修订中提供。
+
+实体也可以在组创建时提供其他组件，如HopLimit、MTU等。如果在组创建时未提供这些组件，SA将为组提供它们。选择的值取决于供应商，超出规范的范围。
+
+o15-0.1.7: 如果SA支持UD多播，则使用无效MGID创建多播组的请求应（shall）导致SA在其响应中返回ERR_REQ_INVALID_GID的错误状态。
+
+o15-0.1.8: 如果SA支持UD多播，则如果SA收到将导致创建具有对其子网不可实现的组件的多播组的请求，SA应（shall）在其响应中返回ERR_REQ_INVALID的错误状态。
+
+o15-0.1.9: 如果SA支持UD多播，则如果SA收到将创建多播组且MCMemberRecord:JoinState.FullMember位未设置为1的请求，SA应（shall）在其响应中返回ERR_REQ_INVALID的错误状态。
+
+15.2.5.17.3 加入多播组
+
+o15-0.2.4: 如果SA支持UD多播，则SA应（shall）使终端端口加入现有多播组，如果：
+• 它收到MCMemberRecord的SubnAdmSet()方法，并且
+• MGID已指定并与现有多播组匹配，并且
+• MCMemberRecord:JoinState不全为0，并且
+• PortGID已指定，并且
+• 所有其他组件与该现有组匹配（通过被通配或具有与组件掩码指定的、组正在使用的值相同的值），ProxyJoin和Reserved等被SA忽略的组件除外。
+
+o15-0.1.11: 如果SA支持UD多播，则如果终端端口按照o15-0.1.10:中的规定加入多播组，SA应（shall）将终端端口当前的MCMemberRecord:JoinState组件替换为MCMemberRecord:JoinState组件与终端端口当前MCMemberRecord:JoinState组件的逻辑OR（如果终端端口之前已加入此多播组）。
+
+o15-0.1.12: 如果SA支持UD多播，则如果终端端口按照o15-0.1.10:和o15-0.1.11:中的规定加入多播组，并且仅MCMemberRecord:JoinState.SendOnlyNonMember位设置为1，则SA应（shall）使该终端端口作为仅发送者加入多播组。
+
+o15-0.1.13: 如果SA支持UD多播，则如果SA收到对多播组的加入请求，其中指定或通配的组件对PortGID指定的端口不可实现，SA应（shall）在其响应中返回ERR_REQ_INVALID的错误状态。
+
+15.2.5.17.4 离开和删除多播组
+
+在o15-0.1.14:和o15-0.1.15:中，术语"有效MC删除MAD"是指SubnAdmDelete(MCMemberRecord) MAD，其中ComponentMask位已设置且值对以下组件按指定设置：
+• MAD的PortGID和MGID组件与存储的MCMemberRecord的PortGID和MGID匹配；
+• 并且MAD的JoinState组件在与存储的MCMemberRecord的JoinState中设置为1的位相同位置上至少包含一个设置为1的位，即两个JoinState组件的逻辑AND不全为零；
+• 并且MAD的JoinState组件中没有设置某些在存储的MCMemberRecord的JoinState组件中未设置的位；
+• 并且满足以下之一：
+  • 存储的MCMemberRecord:ProxyJoin已复位（0），并且MAD的来源是存储的PortGID；
+  • 或者存储的MCMemberRecord:ProxyJoin已设置（1）（参见o15-0.1.2:）；并且MAD的来源是存储的MCMemberRecord:P_Key所指示的分区的成员。
+
+o15-0.1.14: 如果SA支持UD多播，则如果它收到有效的MC删除MAD，SA应（shall）计算匹配的存储MCMemberRecord:JoinState与MAD的JoinState的逻辑NOT的逻辑AND，然后：
+• 如果结果全为0，SA应（shall）使端口离开多播组。MAD的PortGID指定的端口应（shall）从MGID指定的多播组中移除，或者如果MGID被通配，则从其作为成员的所有多播组中移除；
+• 如果结果不全为0，SA应（shall）将存储的MCMemberRecord:JoinState更新为包含该结果。
+
+如果此端口是最后一个接收成员，SA可以删除多播组并释放与之关联的所有资源，包括可能存在于结构本身中的资源。执行此操作的确切时间是供应商特定的。当最后一个接收成员离开组时，SA必须向订阅的终端节点转发陷阱67（参见14.4.10"多播组创建/删除陷阱"，第880页）。
+
+o15-0.1.15: 如果SA支持UD多播，则如果它收到不是有效MC删除MAD的SubnAdmDelete(MCMemberRecord)，SA应（shall）在其响应中返回ERR_REQ_INVALID的错误状态，并且不应（shall）采取其他任何操作。
+
+15.2.5.17.5 查询多播组
+
+可以通过使用SA查询机制（参见15.4.4"管理查询子系统"，第923页）向SA发送SubnAdmGet()或SubnAdmGetTable()请求来查询多播组。SA将为每个匹配查询的多播组返回一个MCMemberRecord，除非在15.4.1.2"其他属性的访问限制"（第922页）中指示了信任的情况；在这种情况下，将返回与多播组关联的所有MCMemberRecord。MCMemberRecord将在PortGID、ProxyJoin和JoinState组件设置为0的情况下返回，除非如上所述指定了信任；在这种情况下，将提供上述组件的实际内容。
+
+o15-0.2.5: 如果SA支持UD多播，则如果它收到MCMemberRecord:MGID被通配的SubnAdmGetTable(MCMemberRecord)，SA应（shall）为每个匹配查询操作的多播组返回一个MCMemberRecord。
+
+15.2.5.18 GuidInfoRecord
+
+表211 GuidInfoRecord
+
+组件 | 长度(位) | 偏移(位) | 描述
+RID LID | 16 | 0 | 端口的LID
+BlockNum | 8 | 16 | GUIDInfo块号；参见表144"GUID块元素"（第821页）
+Reserved | 8 | 24 | 保留
+Reserved | 32 | 32 | 保留
+GUIDInfo | 512 | 64 | GUIDInfo属性内容；参见表143"GUIDInfo"（第821页）
+
+15.2.5.19 TraceRecord
+
+表212 TraceRecord
+
+组件 | 长度(位) | 偏移(位) | 描述
+GIDPrefix | 64 | 0 | IDComponent一致的子网的GID前缀。参见下面的讨论。
+IDGeneration | 16 | 64 | 此属性中使用的ID的代次；参见下面的讨论。
+Reserved | 8 | 80 | 保留
+NodeType | 8 | 88 | 值和解释与NodeInfo:NodeType相同（参见表141"NodeInfo"，第818页）。
+NodeID | 64 | 96 | 节点的ID
+ChassisID | 64 | 160 | 机箱或电源域的ID，如果ChassisGUID或等效信息不可用则为0。
+EntryPortID | 64 | 224 | 如果NodeType是通道适配器：所使用端口的ID。如果NodeType是路由器：入口端口的ID。否则：保留。
+ExitPortID | 64 | 288 | 如果NodeType是路由器，并且路径继续经过此路由器：路由器出口端口的ID。否则：保留。
+EntryPort | 8 | 352 | 如果NodeType是交换机：入口端口号。否则：保留。
+ExitPort | 8 | 360 | 如果NodeType是交换机，并且路径继续经过此交换机：出口端口号。否则：保留。
+
+TraceRecord属性用于描述路径从单个节点到达、经过或离开的路线。整个路径由作为SubnAdmGetTraceTable()方法响应返回的TraceRecord表来描述。
+
+为了本讨论的目的，设IDComponent为TraceRecord的NodeID、ChassisID、EntryPortID或ExitPortID中的任何一个。
+
+o15-0.2.6: 如果ClassPortInfo:CapabilityMask.IsMultiPathSupported对于SA为1，则TraceRecord的IDComponent不应（shall not）是它们标识的实体的GUID。IDComponent应（shall）是可比较的，即：给定从同一SA获取的任意两个TraceRecord（由它们具有相同的TraceRecord:GIDPrefix指示），具有相同的TraceRecord:IDGeneration值；并且给定每个TraceRecord中相应的IDComponent（两者都是ChassisID，或两者都是NodeID等）；那么如果两个IDComponent标识相同的实体，则它们的值应（shall）相同，如果它们标识不同的实体，则应（shall）不同。
+
+可以使用满足o15-0.2.6:的任何标识方案。例如，可以使用单独维护的标识符集，可以将正式的加密函数应用于GUID，可以使用非正式的方法来混淆GUID（如将它们与交替的0和1的字进行XOR运算）等。所使用的IDComponent值如何掩盖它们所代表的实体的身份是供应商特定的。
+
+由请求路径跟踪的SA负责在必要时与其他子网的SA协调，以向请求者提供有用的、可比较的TraceRecord。请注意，虽然在某些实现中可能方便，但路径跟踪中的所有TraceRecord不必来自同一SA，也不必具有相同的IDGeneration值。
+
+当必须修改实体到标识符的映射时，SA可以更改IDGeneration字段。因此，使用此功能的程序可能需要使用SubnAdmGetTraceTable()重新请求路径跟踪，以获取其IDComponent可以进行比较的TraceRecord。
+
+15.2.5.20 MultiPathRecord
+
+表213 MultiPathRecord
+
+组件 | 长度(位) | 偏移(位) | 描述
+RawTraffic | 1 | 0 | 语义与PathRecord组件RawTraffic（第900页）相同
+Reserved | 3 | 1 | 保留
+FlowLabel | 20 | 4 | 语义与PathRecord组件FlowLabel（第900页）相同
+HopLimit | 8 | 24 | 语义与PathRecord组件HopLimit（第900页）相同
+TClass | 8 | 32 | 语义与PathRecord组件TClass（第900页）相同
+Reversible | 1 | 40 | 语义与PathRecord组件Reversible（第900页）相同
+NumbPath | 7 | 41 | SGID和DGID之间返回的最大路径数。如果满足查询的更多路径存在于SGID和DGID之间，则只应（shall）返回NumbPath条路径（实现定义）。
+P_Key | 16 | 48 | 语义与PathRecord组件P_Key（第900页）相同
+Reserved | 12 | 64 | 保留
+SL | 4 | 76 | 语义与PathRecord组件SL（第900页）相同
+MtuSelector | 2 | 80 | 语义与PathRecord组件MtuSelector（第900页）相同
+Mtu | 6 | 82 | 语义与PathRecord组件Mtu（第901页）相同
+RateSelector | 2 | 88 | 语义与PathRecord组件RateSelector（第901页）相同
+Rate | 6 | 90 | 语义与PathRecord组件Rate（第901页）相同
+PacketLifeTimeSelector | 2 | 96 | 语义与PathRecord组件PacketLifeTimeSelector（第902页）相同
+PacketLifeTime | 6 | 98 | 语义与PathRecord组件PacketLifeTime（第902页）相同
+Reserved | 8 | 104 | 保留。
+IndependenceSelector | 2 | 112 | 1 - 尽可能故障独立的路径。0, 2, 3 - 保留
+Reserved | 6 | 114 | 保留
+SGIDCount | 8 | 120 | 下面SDGIDn数组开头的SGID数量。应（shall）至少为1。
+DGIDCount | 8 | 128 | SDGIDn数组中SGID之后的DGID数量。应（shall）至少为1。
+Reserved | 56 | 136 | 对齐偏移
+SDGID1 | 128 | 192 | 源GID 1；应（shall）为单播GID。
+SDGID2 | 128 | 320 | 源或目的GID 2；应（shall）为单播GID。
+... | 128 | ... | 源或目的GID；应（shall）为单播GID。
+SDGIDn | 128 | 192 + 128×(n-1) | 最后一个目的GID；应（shall）为单播GID。SDGID的总数应（shall）等于SGIDCount + DGIDCount。
+
+MultiPathRecord属性可用于请求一组源和一组目的之间的多条路径，例如用于查找适合提高可用性和/或性能的独立路径。它也可用于请求一组源中的任何一个和一组目的中的任何一个之间的单条路径。不要求源的数量等于目的的数量。
+
+o15-0.2.7: 如果ClassPortInfo:CapabilityMask.IsMultiPathSupported对于SA为1，则SA应（shall）使用一组零个或多个满足接收到的MultiPathRecord中指示约束的PathRecord来响应包含有效MultiPathRecord属性的SubnAdmGetMulti()。响应中应（shall）使用PathRecord属性ID。
+
+由于MultiPathRecord中SDGID元素列表的长度可能因使用而异，因此MultiPathRecord属性的长度是可变的。其大小可能超过SA MAD（192字节）中可容纳的最大大小。其最小和最大长度分别为56字节和8184字节，对应于SGIDCount和DGIDCount字段的最小和最大值（分别为1和255）。SubnAdmGetMulti()方法通过使用可靠多数据包协议（15.3"可靠多数据包事务协议"，第919页）来发送属性和接收响应，从而允许这种可变性。
+
+IndependenceSelector组件的目的是允许请求彼此故障独立的路径，因此例如适用于自动路径迁移中用作备用路径（参见17.2.8"自动路径迁移"，第1031页）。
+
+如果请求的路径少于源和目的之间存在的路径，建议在满足其他指定特性的路径中返回具有更好优先级的路径。
+
+15.3 可靠多数据包事务协议
+
+SA使用13.6"可靠多数据包事务协议"（第770页）中定义的可靠多数据包事务协议（RMPP），结合SubnAdmGetTable()、SubnAdmGetTableResp()、SubnAdmGetTraceTable()、SubnAdmGetMulti()和SubnAdmGetMultiResp()方法。
+
+SA头部的AttributeOffset字段在所有RMPP DATA数据包中的使用如表185"子网管理字段"（第884页）中所述。
+
+C15-0.1.18: SA应（shall）通过执行13.6.6.1"接收者发起的传输"（第790页）中描述的接收者发起的RMPP传输序列中的发送者角色来响应SubnAdmGetTable()和SubnAdmGetTraceTable()请求。
+• 从接收者发送到发送者的所有数据包中使用的方法应（shall）为SubnAdmGetTable()或SubnAdmGetTraceTable()，取决于哪个发起了传输。
+• 从发送者发送到接收者的所有数据包中使用的方法应（shall）为SubnAdmGetTableResp()。
+• 除RMPP DATA数据包外，所有数据包中的属性内容在初始SubnAdmGetTable()或SubnAdmGetTraceTable()之后应（shall）被忽略。
+• 由SubnAdmGetTable()发起的传输应（shall）在协议的所有数据包中使用发起的SubnAdmGetTable()中存在的属性ID，除非对发起的SubnAdmGetTable()中使用的属性另有规定。
+• 由SubnAdmGetTraceTable发起的传输应（shall）在从接收者发送到发送者的所有数据包中使用PathRecord属性ID，在从发送者发送到接收者的所有数据包中使用TraceRecord属性ID。
+
+C15-0.1.19: SA应（shall）通过执行13.6.6.3"发送者发起的双向传输"（第792页）中描述的双向RMPP传输序列来响应SubnGetMulti()请求。
+• 从接收者发送到发送者的所有数据包中使用的方法应（shall）为SubnGetMulti()。
+• 从发送者发送到接收者的所有数据包中使用的方法应（shall）为SubnGetMultiResp()。
+• 除RMPP DATA数据包外，所有数据包中的属性内容在初始SubnAdmGetMulti()之后应（shall）被忽略。
+• 传输序列中的所有MAD应（shall）使用发起的SubnAdmGetMulti()中存在的属性ID。
+
+C15-0.1.20: SA发出或接收的所有RMPP传输序列的初始DATA数据包应（shall）精确指定传输数据的PayloadLength。
+
+请注意，此PayloadLength不仅必须包括SubnetAdminData数据的长度，还必须包括每个发送的数据包额外的20字节，以考虑RMPP头部之后的SA头部（SM_Key、AttributeOffset、Reserved、ComponentMask）；以及由AttributeOffset字段指示的多个属性之间的任何额外填充。
+
+15.4 操作
+
+本节描述SA的操作方面。
+
+15.4.1 访问限制
+
+SA涉及两种类型的访问限制：验证信息请求者，以及限制请求者被允许接收的数据。这些在下面讨论。
+
+此处描述的SA访问限制基于分区成员资格，旨在实现以下规则：如果分区成员资格允许访问数据，则授予该访问；但如果不允许，则请求者应不知道该信息的存在以及包含该信息的网络元素的存在。此外，在任何情况下，认证信息都不会提供给不受信任的请求。节点的PortInfo:M_Key和PortInfo:M_KeyProtectBits可能禁止没有有效M_Key的SMP访问某些数据，这与SA访问限制无关。
+
+15.4.1.1 PathRecord的访问限制
+
+C15-0.1.21: 子网管理应（shall）仅向请求者返回路径属性，其中源端口、目的端口和请求者三者两两共享P_Key。有关详细说明，请参见本节（15.4.1.1"PathRecord的访问限制"，第921页）的其余部分。
+
+• 两个端口在一个端口的P_Key表中至少有一个有效的P_Key与另一个端口的P_Key表中的P_Key匹配时共享P_Key。（有关P_Key匹配的定义，请参见10.9.3"分区密钥匹配"，第526页；有关有效P_Key的定义，请参见10.9.1.2"特殊P_Key"，第524页。）
+
+• "两两"意味着三对端口之间应（shall）存在P_Key共享：路径源端口和路径目的端口；路径源端口和请求者的一个端口；路径目的端口和请求者的一个端口。三个匹配中的每一个都可能基于不同P_Key的匹配。
+
+• 用于确定共享的路径源和目的端口是路径的SGID（或SLID）和DGID（或DLID）中隐含的端口。
+
+• 此确定中涉及的所有端口应（shall）在请求所指向的子网管理器管理的子网上。
+
+15.4.1.2 其他属性的访问限制
+
+以下合规性声明中使用的术语"受信任请求"是指在SA头部的SM_Key组件中包含有效SM_Key的请求。
+
+C15-0.2.1: 当请求者节点向SA发送受信任请求时，应（shall）返回所请求的数据。当请求者节点向SA发送非受信任的数据请求，该请求将提供有关主题节点的信息时，SA应（shall）仅返回有关请求者与之共享P_Key的主题节点的信息数据，下面C15-0.1.23:中注明的例外情况除外。
+
+共享定义如下：
+• 两个终端端口在一个终端端口的P_Key表中至少有一个有效的P_Key与另一个终端端口的P_Key表中的P_Key匹配时共享P_Key。（有关P_Key匹配的定义，请参见10.9.3"分区密钥匹配"，第526页；有关有效P_Key的定义，请参见10.9.1.2"特殊P_Key"，第524页。）
+• 此确定中涉及的所有终端端口必须在请求所指向的子网管理器管理的子网上。
+
+作为SA可能返回提供有关其他节点信息的数据（C15-0.1.22:所涵盖的情况）的一个例子，考虑表203"ServiceRecord"（第895页）。该属性包含一个标识终端端口的ServiceGID组件。C15-0.1.22:意味着SA不会返回包含标识不与接收ServiceRecord的终端端口共享P_Key的终端端口的ServiceGID的ServiceRecord。
+
+C15-0.2.2: 子网管理应（shall）遵循以下有关数据访问的附加规则：
+• PortInfoRecord应（shall）始终在M_Key组件设置为0的情况下提供，除非是受信任请求的情况，此时应（shall）提供实际的M_Key组件内容。
+• P_KeyTableRecord和ServiceAssociationRecord应（shall）仅在受信任请求的响应中提供。
+• ServiceRecord应（shall）始终在ServiceKey组件设置为0的情况下提供，除非是受信任请求的情况，此时应（shall）提供实际的ServiceKey组件内容。
+• InformInfoRecord应（shall）始终在QPN设置为0的情况下提供，除非是受信任请求的情况，此时应（shall）返回实际的订阅者QPN。
+• MCMemberRecord应（shall）始终在PortGID、JoinState和ProxyJoin组件设置为0的情况下提供，除非是受信任请求的情况，此时应（shall）提供实际的组件内容。
+• TraceRecord应（shall）返回给任何请求它们的终端节点。
+• 对SM安全陷阱（参见表131，第812页）的SubnAdmSet(InformInfo)订阅应（shall）仅在来自受信任来源时提供。
+
+15.4.2 定位子网管理
+
+C15-0.1.24: 应（shall）可以通过从任何终端端口向由终端端口的PortInfo:MasterSMLID标识的节点的QP1（GSI）发送GMP来确定SA的位置，在GMP中使用终端端口的基本LID作为SLID，终端端口的PortInfo:MasterSMSL作为SL，已知的Q_Key（0x8001_0000），以及SM放入终端端口P_Key表中的默认P_Key（0xFFFF或0x7FFF）之一（表183"初始化"，第868页）。
+
+C15-0.1.25: 按照C15-0.1.24:发送的SubnAdmGet(ClassPortInfo)应（shall）返回与子网管理通信所需的所有信息。或者，按照C15-0.1.24:发送的有效SA GMP应（shall）返回提供所有此类信息的重定向响应，或者应（shall）由SA正常处理。
+
+15.4.3 事件转发子系统
+
+SA可能报告的陷阱或通知集合在14.2.5.1"通知和陷阱"（第812页）中描述。注意：在发送通知时，SA必须遵守访问限制；参见o13-14.1.1:（第746页）和C15-0.2.2:（第922页）。
+
+C15-0.1.26: 针对SA的事件转发操作应（shall）符合13.4.5"管理类方法"（第721页）中描述的通用方法。
+
+15.4.4 管理查询子系统
+
+在管理查询子系统中，SA MAD中的64位ComponentMask在查询操作中用于指定要查询的特定属性组件。ComponentMask只能引用整个组件，不能引用组件的元素或部分。
+
+C15-0.1.27: 对于查询操作，ComponentMask的位0应（shall）引用SA属性的第一个组件，位1应（shall）引用第二个组件，依此类推。就此位编号而言，"组件"应（shall）表示以下之一：
+• 由本章属性表定义的命名属性组件，包括"Component"列命名为"Reserved"的行，但不包括仅引用其他章节中表定义的属性组件的行（14.2.5.3"NodeInfo"，第818页经常被引用）；将后者的行称为"引用行"。
+• 由另一章节中的表定义的属性的命名组件，该表由引用行直接引用；如果同一SA属性中引用了多个此类组件，则编号按顺序跨它们进行。
+
+换句话说，ComponentMask中使用的位编号就好像SA引用行被它们引用的属性替换一样，就好像执行了文本宏展开（仅展开一级嵌入）。
+
+例如，在查询PortInfoRecord（参见15.2.5.3"PortInfoRecord"，第891页）时，ComponentMask的位7引用PortInfo:CapabilityMask（参见14.2.5.6"PortInfo"，第821页）。再例如，在查询LinearForwardingTableRecord（参见15.2.5.6"LinearForwardingTableRecord"，第892页）时，ComponentMask位3标识整个LinearForwardingTableBlock（参见表152"LinearForwardingTable"，第837页），但没有ComponentMask位对应于单个Port Block Element（参见表153"端口块元素"，第837页）。此外，本章中LinearForwardingTableRecord中名为"LinearForwardingTable"的表条目本身不使用位位置。
+
+C15-0.2.3: 使用ComponentMask进行匹配的规则如下：
+• 当查询中ComponentMask位为1时，所有响应中的相应组件应（shall）与查询中提供的值按位相同。
+• 当查询中ComponentMask位为0时，相应组件的值不应（shall not）在选择响应时被考虑。这称为"通配"，ComponentMask位为0的组件被称为已被"通配"。
+• 例外：
+  • 保留字段不应（shall not）在选择查询响应时被考虑。
+  • 特定属性组件可能指定不符合上述规则的匹配规则（例如PathRecord:MtuSelector）。
+
+ComponentMask匹配用于读取、设置或删除操作。全为1的ComponentMask意味着所有组件都用于查询。在查询请求中使用全为零的ComponentMask的结果是返回被查询属性类型的所有属性，除了根据15.4.1"访问限制"（第921页）不允许的属性。对于某些属性（例如PathRecord），ComponentMask的某些位必须在查询操作中设置为1。
+
+对于事件转发子系统，ComponentMask不使用。
+
+15.4.5 SubnAdmGetTable() / SubnAdmGetTableResp()
+
+SubnAdmGetTable()用于请求属性表。操作仅允许在由属性标识符指定的特定表上进行。
+
+PathRecord的SubnAdmGetTable()查询示例如表206"PathRecord请求MAD头部字段示例"（第904页）所示。NodeType为3的NodeRecord示例查询如表214（第925页）所示；与表206一样，仅显示值与默认值不同的头部字段：
+
+表214 所有具有特定NodeType的NodeRecord的SubnAdmGetTable查询
+
+组件 | 值 | 解释
+MADHeader:MgmtClass | 0x03 | 指定SubnAdm类
+MADHeader:Method | 0x12 | 指定SubnAdmGetTable()
+MADHeader:TransactionID | 0x0000000011223344 | 事务ID（将在响应中返回）
+MADHeader:AttributeID | 0x0011 | 指定NodeRecord
+RMPPHeader:RMPPFlags.Active | 0 | 信息标志：RMPP未激活
+SAHeader:SM_Key | 0 | 此查询不需要SM_Key值
+SAHeader:ComponentMask | 0x0000000000000010 | 选择要使用的组件；只需要位4。
+NodeRecord:NodeType | 3 | 获取NodeType值为3的所有NodeRecord，即所有路由器。
+
+子网管理使用SubnAdmGetTableResp()来响应所有SubnAdmGetTable()查询。
+
+C15-0.1.29: SA应（shall）通过返回SubnAdmGetTableResp()并在状态字段中提供拒绝原因来指示被拒绝的请求。
+
+SubnAdmGetTable()和相应的SubnAdmGetTableResp()在图197"SubnAdmGetTable()示例"（第926页）中有示意图说明。此事务的后续SubnAdmGetTableResp() MAD将具有设置为指示数据流中位置的RMPP头部条目值（参见13.6.2"RMPP数据包格式"，第772页）。数据的延续由请求者在其自己的数据区域中重新组装。
+
+SubnAdmGetTableResp()的属性包含在SA MAD中，如图所示。请注意，属性可能跨越连续的响应MAD被拆分。
+
+15.4.6 SubnAdmGet() / SubnAdmGetResp()：获取属性
+
+C15-0.1.30: 响应SubnAdmGet()时，如果根据15.4.1"访问限制"（第921页）中指定的访问规则和ComponentMask指定的组件匹配，将返回单个属性，则SubAdmGetResp()应（shall）返回该属性，状态值为零。
+
+C15-0.1.31: 如果SubnAdmGet()未能满足C15-0.1.30:，SubnAdmGetResp()应（shall）返回，状态字段提供失败原因（参见表188"SA MAD类特定状态编码"，第886页）。
+
+表215 特定NodeRecord的SubnAdmGet()查询
+
+组件 | 值 | 解释
+MADHeader:MgmtClass | 0x03 | 指定SubnAdm类
+MADHeader:Method | 0x01 | 指定SubnAdmGet()
+MADHeader:TransactionID | 0x0000000011223344 | 事务ID（将在响应中返回）
+MADHeader:AttributeID | 0x0011 | 指定NodeRecord
+RMPPHeader:RMPPFlags.Active | 0 | 信息标志：RMPP未激活
+SAHeader:SM_Key | 0 | 此查询不需要SM_Key值
+SAHeader:ComponentMask | 0x0000000000000080 | 选择要使用的组件；只需要位7。
+NodeRecord:PortGUID | 0x0000000000000004 | 获取具有给定PortGUID的NodeRecord。
+
+15.4.7 SubnAdmSet()：设置属性
+
+C15-0.1.32: 响应SubnAdmSet()时，如果该MAD中包含的属性被添加到SA，则应（shall）返回包含已添加属性的SubAdmGetResp()。添加给定类型属性的规则在相应的属性定义章节中指定。
+
+请注意，不支持SubnAdmSet()的属性（表190"子网管理属性/方法映射"，第890页）隐式不能被添加。
+
+C15-0.1.33: 如果SubnAdmSet()未能满足C15-0.1.32:，SubnAdmGetResp()应（shall）返回，状态字段提供失败原因（参见表188"SA MAD类特定状态编码"，第886页）。
+
+15.4.8 SubnAdmDelete()：删除属性
+
+SubnAdmDelete()方法提供了一种删除先前使用SubnAdmSet()添加到SA的属性的方法。表190"子网管理属性/方法映射"（第890页）指定了支持SubnAdmDelete()的属性。请注意，不支持SubnAdmDelete()的属性不能被删除。删除属性的规则在相应的属性定义章节中指定。
+
+15.4.9 SubnAdmGetTraceTable()：跟踪路径
+
+SubnAdmGetTraceTable()方法与SubnAdmGetTableResp()配合使用，提供了一种比较SA提供的路径的方法，以详细确定它们使用相同节点、端口、链路或机箱的程度。例如，它可以用作检查或选择一组路径之间所需的故障独立度的方式。
+
+给SubnAdmGetTraceTable()的PathRecord必须完全指定，并且必须指定请求者被允许访问的现有路径。
+
+o15-0.2.8: 如果ClassPortInfo:CapabilityMask.IsMultiPathSupported对于SA为1，则SA应（shall）拒绝以下任何SubnAdmGetTraceTable()请求为无效：包含不描述有效路径的PathRecord的请求；以多播GID或LID作为源或目的组件的请求；不描述请求者按照15.4.1.1"PathRecord的访问限制"（第921页）中指定的规则被允许访问的路径的请求；或者其所有组件未完全指定的请求（即引用PathRecord组件的ComponentMask的任何位为0）。在任何这些情况下，SA应（shall）使用SubnAdmGetTableResp()响应，指示零长度表和ERR_REQ_INVALID的状态码。（参见表188"SA MAD类特定状态编码"，第886页。）
+
+给定SubnAdmGetTraceTable()请求中描述现有路径的有效PathRecord，SA使用SubnAdmGetTableResp()将路径的元素作为TraceRecord表返回，从源开始到目的结束。
+
+o15-0.2.9: 如果ClassPortInfo:CapabilityMask.IsMultiPathSupported对于SA为1，则如果向SA发送包含对SubnAdmGetTraceTable()有效的PathRecord的SubnAdmGetTraceTable()（参见o15-0.1.19:），则SA应（shall）使用SubnAdmGetTableResp()方法响应，返回TraceRecord属性表。该表的TraceRecord应（shall）描述路径穿越的每个节点，以及路径如何穿越每个节点。该表中TraceRecord的顺序应（shall）是在该路径上发送的数据包穿越这些节点的顺序，从路径的源节点开始到目的节点结束。
+
+15.4.10 SubnAdmGetMulti() / SubnAdmGetMultiResp()：发送和接收多数据包
+
+SubnAdmGetMulti()在使用可靠多数据包协议（RMPP）从客户端向SA发送属性时使用。SubnAdmGetMultiResp()随后作为响应使用RMPP从SA向客户端发送属性。相比之下，例如，SubnAdmGetTable()仅使用RMPP从SA向客户端发送属性。

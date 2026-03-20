@@ -1,0 +1,1547 @@
+第十六章：通用服务
+
+本章描述了IBA在通用服务下提供的管理服务范围，但不包括在前一章中描述的子网管理（Subnet Administration）。通用管理服务提供以下管理类：
+
+• 性能管理（Performance Management）— 提供使管理器能够从IBA组件检索性能统计数据和错误信息的方法。
+
+• 基板管理（Baseboard Management）— 提供向子网之外的组件（即"带外"组件）传输消息的手段。例如，可以向IBA通道适配器上的机箱温度监控和控制硬件发送消息。
+
+• 设备管理（Device Management）— 提供执行I/O控制器/I/O单元管理的手段。此类定义了在两个子网连接点之间发送和接收设备管理数据包的机制，通常是在HCA和TCA之间。TCA提供到I/O控制器和I/O设备的接口。
+
+• SNMP隧道（SNMP Tunneling）— 提供一组方法、数据格式和属性以支持SNMP隧道。SNMP数据包嵌入在符合IBA的管理数据报中。
+
+• 供应商特定（Vendor Specific）— 提供一组通用方法。供应商可以自由定义新方法和属性，但必须符合本文中描述的管理数据报格式和限制。
+
+• 应用程序特定（Application Specific）— 提供一组通用方法。应用程序可以自由定义新方法和属性，但必须符合本文中描述的管理数据报格式和限制。
+
+• 通信管理（Communication Management）— 提供在节点之间建立、终止和迁移连接的机制，并提供基本的Service ID解析。
+
+
+16.1 性能管理
+
+C16-1: 性能管理代理（Performance Management Agent）在所有节点上是强制性的。
+
+性能管理类提供使性能管理实体能够从InfiniBand组件检索性能和错误统计数据的机制。性能量被分为两类：
+
+• 强制性的。这些量对所有节点（TCA、HCA、交换机和路由器）的所有端口是强制性的。这些量被认为是支持多供应商InfiniBand网络的基本仪器和性能分析所必需的。
+
+• 可选的。这些量可由供应商自行决定是否实现，在此作为标准化辅助描述。
+
+
+16.1.1 MAD格式
+
+C16-2: 性能类中的数据报应符合13.4"管理数据报"（第717页）中规定的MAD格式和使用方式，并进一步按照图198"性能管理MAD格式"（第931页）和表216"性能管理MAD字段"（第931页）进行定制。
+
+字节 位31-24 位23-16 位15-8 位7-0
+0    公共MAD头部
+...
+20-24 保留
+...
+60-64 数据
+...
+252
+
+图198 性能管理MAD格式
+
+表216 性能管理MAD字段
+字段名称        长度      描述
+公共MAD头部    24字节    如13.4.2"管理数据报格式"（第718页）中描述的公共MAD头部
+保留            40字节    保留
+数据            192字节   属性数据从以下各节描述的格式逐位映射到此数据字段的起始位置。如果属性小于数据字段，则数据字段其余部分的内容未指定。
+
+Status字段在13.4.7"Status字段"（第731页）中描述。未定义类特定位。
+
+
+16.1.2 方法
+
+性能管理类使用13.4.5"管理类方法"（第721页）中描述的公共方法的一个子集。
+
+C16-2.1.1: 性能管理代理应支持表218"性能管理方法"（第932页）中列出的方法。表中未列出的所有方法类型值均为保留。
+
+表217 性能管理Status字段
+位      名称   含义
+0-7     -      如13.4.7"Status字段"（第731页）中定义的公共位
+8-15    -      类特定位为保留
+
+表218 性能管理方法
+方法            类型值   描述
+PerformanceGet()   0x01    请求获取（读取）类特定信息属性
+PerformanceSet()   0x02    请求设置（写入）类特定信息属性
+PerformanceGetResp() 0x81  对Get()或Set()请求的响应
+
+
+16.1.3 强制属性
+
+C16-2.1.2: 性能管理代理应支持表219"强制性能管理属性"（第932页）和表220"强制性能管理属性/方法映射"（第933页）中列出的强制属性。表219"强制性能管理属性"和表226"可选性能管理属性"（第950页）中未列出的所有属性ID均为保留。
+
+这些属性在表后的各节中详细描述。这些属性的使用模型在16.1.3.6"典型性能属性使用模型"（第949页）中描述。
+
+表219 强制性能管理属性
+属性名称          属性ID    属性修改器        描述
+ClassPortInfo     0x0001    0x00000000       参见13.4.8.1"ClassPortInfo"（第734页）
+PortSamplesControl 0x0010   选择n个独立采样机制之一；零(0)应被实现   端口性能数据采样控制。参见16.1.3.2"PortSamplesControl"（第933页）
+PortSamplesResult  0x0011   选择n个独立采样机制之一；零(0)应被实现   端口性能数据采样结果。参见16.1.3.4"PortSamplesResult"（第944页）
+PortCounters       0x0012   0x00000000       端口基本性能和错误计数器。参见16.1.3.5"PortCounters"（第945页）
+保留               0x0013-0x0014  0x00000000-0xFFFFFFFF  保留
+
+表220 强制性能管理属性/方法映射
+属性名称            PerformanceGet()  PerformanceSet()
+ClassPortInfo       X
+PortSamplesControl  X                 X
+PortSamplesResult   X
+PortCounters        X                 X
+
+表221 性能管理ClassPortInfo:CapabilityMask
+位      名称           含义
+0-7     -              如13.4.8.1"ClassPortInfo"（第734页）中定义的公共位
+8       AllPortSelect  如果报告为1，表示所有包含Port Select组件的属性支持将其设置为0xFF以一次从所有端口收集数据。如果报告为0，在PortSelect中使用0xFF会导致未定义行为。
+9-15    -              类特定位为保留
+
+
+16.1.3.1 ClassPortInfo
+
+ClassPortInfo属性在13.4.8.1"ClassPortInfo"（第734页）中描述。
+
+
+16.1.3.2 PortSamplesControl
+
+PortSamplesControl属性是强制性的。它提供了一种启动采样的方法，并为一个选定端口在指定间隔内选择要采样的量，例如：
+• 发送和接收的数据量
+• 发送和接收的数据包数量
+• 间隔开始时的发送队列深度
+
+可以使用此机制采样的完整量列表在表223"CounterSelect值"（第941页）中给出。
+
+采样通过PerformanceSet(PortSamplesControl)启动。采样状态和结果通过PerformanceGet(PortSamplesResult)获取。
+
+为了支持与MAD延迟和发送方或接收方其他端口活动解耦的随机采样，PortSamplesControl属性提供了指定采样间隔延迟启动时间的方法。参见表222"PortSamplesControl"（第934页）中的SampleStart组件。
+
+性能采样操作基于称为tick的标准时间间隔。tick是链路传输周期的倍数。例如，对于运行在2.5千兆传输/秒的链路，为400皮秒的倍数。实现者可以从一系列乘数中选择。
+
+AttributeModifier选择多个可能的独立采样机制之一。
+
+C16-3: 所有节点应实现与AttributeModifier为零对应的PortSamplesControl和PortSamplesResult。实现额外的PortSamplesControl和PortSamplesResult对允许同时采样多个端口，并应使用从一(1)开始的递增AttributeModifier值。实现的额外集数量在PortSamplesControl.SampleMechanisms中定义。
+
+C16-4: 此合规声明已过时，已被C16-4.1.1:替代。
+
+C16-4.1.1: 对于每个采样机制，应实现至少一个且最多15个计数器。
+
+表222 PortSamplesControl
+组件            访问   长度(位)  偏移(位)  描述
+OpCode          RW     8         0        用于在采样操作码特定的可选量时选择特定的数据包操作码（如BTH中所见）。如果OpCode为0xFF，则将所有操作码作为一个整体采样，否则一次只能采样一个操作码，但可以为同一操作码采样多个量。
+PortSelect      RW     8         8        选择将被采样的端口。对于通道适配器或路由器，PortSelect指的是端口，唯一有效值是接收请求的端口号。对于交换机，PortSelect指的是交换机端口，有效值范围从0到交换机中的端口数。但是，0仅对增强型交换机管理端口有效；对于基本管理端口将被忽略。如果支持同时从所有端口收集数据（参见表221"性能管理ClassPortInfo:CapabilityMask"第933页），将PortSelect设置为0xFF将导致累积所有有效端口的采样数据。选择无效端口值时，任何结果均未定义。
+Tick            RO     8         16       表示节点的采样时钟间隔，为链路传输周期的10倍的倍数。对于2.5G传输链路，传输周期为400皮秒。编码如下：
+                                          0x00 = 10 × 链路传输周期（对于2.5G传输链路为4纳秒）
+                                          0x01 = 20 × 链路传输周期
+                                          0x02 = 30 × 链路传输周期
+                                          ...
+                                          0xFF = 2560 × 链路传输周期
+                                          为最大化性能属性的效用，鼓励实现者选择最小的实际tick大小
+Reserved        RO     5         24       保留
+CounterWidth    RO     3         29       表示以下组件的实际位宽：
+                                          • SampleStart
+                                          • SampleInterval
+                                          • PortSamplesResult:Counter0到14
+                                          编码如下：
+                                          0 = 16位
+                                          1 = 20位
+                                          2 = 24位
+                                          3 = 28位
+                                          4 = 32位
+                                          5-7 = 保留
+                                          小于32位的计数器应作为对应32位属性组件的最低有效位实现，未实现的高位在Get时返回零，在Set时忽略。
+Reserved        RO     2         32       保留
+CounterMasks0   RO     3         34       一个3位位掩码，确定PortSamplesResult:Counter0的能力。最高有效位对应PortSamplesResult:Counter0。编码：
+                                          位0 = 支持所有强制量；应为1
+                                          位1 = 支持可选量
+                                          位2 = 支持供应商定义的量
+CounterMasks1to9 RO    27        37       由九个3位位掩码组成的数组，每个位掩码确定PortSamplesResult中可选计数器的能力。最高有效3位字段对应PortSamplesResult:Counter1；最低有效字段对应PortSamplesResult:Counter9。编码：
+                                          位0 = 支持所有强制量
+                                          位1 = 支持可选量
+                                          位2 = 支持供应商定义的量
+                                          所有位为零表示计数器未实现
+Reserved        RO     1         64       保留
+CounterMasks10to14 RO  15        65       由五个3位位掩码组成的数组，每个位掩码确定PortSamplesResult中可选计数器的能力。最高有效3位字段对应PortSamplesResult:Counter10；最低有效字段对应PortSamplesResult:Counter14。编码：
+                                          位0 = 支持所有强制量
+                                          位1 = 支持可选量
+                                          位2 = 支持供应商定义的量
+                                          所有位为零表示计数器未实现
+SampleMechanisms RO    8         80       实现的独立采样机制数量（即PortSamplesControl和PortSamplesResult的集数）减一：
+                                          0 = 一个采样机制可用（通过AttributeModifier零寻址）
+                                          1 = 两个采样机制可用，AttributeModifier 0和1
+                                          ...
+                                          255 = 256个采样机制可用，通过AttributeModifier 0到255寻址
+                                          提供多个采样机制是可选的。N个采样机制将允许N个独立采样同时运行。使用AttributeModifier值0xFFFFFFFF的结果是供应商特定的。
+Reserved        RO     6         88       保留
+SampleStatus    RO     2         94       0 = 采样完成，结果可从PortSamplesResult属性获取
+                                          1 = SampleStart定时器正在运行。PortSamplesResult中的所有采样计数器值均未定义
+                                          2 = 采样正在进行中。PortSamplesResult中的所有采样计数器值均未定义
+                                          3 = 保留
+                                          当SampleStatus非零时，PerformanceSet(PortSamplesControl)不会影响PortSamplesControl，并将返回所有组件的现有值
+OptionMask      RO     1         96       确定是否实现了哪些可选量（如果有的话）。参见表223"CounterSelect值"（第941页）了解每个量或量集的描述
+CounterSelect0-14  RW  各16     304-528   选择要由PortSamplesResult:Counter0到Counter14采样的量，如表223"CounterSelect值"（第941页）中定义。如果选择了未实现的量，则对PortSamplesResult:Counter返回的Get结果为零
+VendorMask      RO     32        192      如果节点不支持任何供应商特定计数器则应为零，否则使用由供应商定义
+SampleStart     RW     32        224      确定采样间隔何时开始。当Set时，此值被加载到定时器中，然后发生以下事件：
+                                          • SampleStatus设置为1
+                                          • PortSamplesResult中的计数器设置为零
+                                          • 定时器每tick递减一次
+                                          当定时器达到零时，计时停止并发生以下事件：
+                                          • 如果选择了PortXmitQueue量，则锁存
+                                          • 启动PortSamplesResult计数器
+                                          • SampleStatus设置为2
+                                          • 启动SampleInterval定时器
+                                          SampleStart定时器允许性能应用程序随机化采样开始时间，确保与节点或网络事件解耦。通常使用的值为10毫秒级。正是此间隔相对于链路速率的细粒度使解耦成为可能
+SampleInterval  RW     32        256      确定采样间隔的长度。当Set时，此值被加载到定时器中。当SampleStart计数器达到零时，此定时器每tick递减一次。当它达到零时，计时停止并发生以下事件：
+                                          • PortSamplesResult计数器停止，结果值可用
+                                          • SampleStatus设置为零
+Tag             RW     16        288      性能应用程序在执行PerformanceSet(PortSamplesControl)时使用，以唯一标识其采样运行（以防与另一个性能应用程序冲突）。当应用程序想要启动采样运行时，应选择一个随机Tag值并执行PerformanceSet(PortSamplesControl)。如果返回的Tag值与所选值不匹配，则另一个应用程序正在使用该采样机制。在这种情况下，第一个应用程序应等待适当时间后重试
+
+CounterSelect位字段定义：
+位0（LSB）= 保留
+位1 = PortXmitQueue[n]
+位2 = PortXmitDataVL[n]
+位3 = PortRcvDataVL[n]
+位4 = PortXmitPktVL[n]
+位5 = PortRcvPktVL[n]
+位6 = PortRcvErrorDetails:PortLocalPhysicalErrors
+位7 = PortRcvErrorDetails:PortMalformedPacketErrors
+位8 = PortRcvErrorDetails:PortBufferOverrunErrors
+位9 = PortRcvErrorDetails:PortDLIDMappingErrors
+位10 = PortRcvErrorDetails:PortVLMappingErrors
+位11 = PortRcvErrorDetails:PortLoopingErrors
+位12 = PortXmitDiscardDetails:PortInactiveDiscards
+位13 = PortXmitDiscardDetails:PortNeighborMTUDiscards
+位14 = PortXmitDiscardDetails:PortSwLifetimeLimitDiscards
+位15 = PortXmitDiscardDetails:PortSwHOQLifetimeLimitDiscards
+位16 = PortOpRcvCounters:PortOpRcvPkts
+位17 = PortOpRcvCounters:PortOpRcvData
+位18 = PortFlowCtlCounters:PortXmitFlowPkts
+位19 = PortFlowCtlCounters:PortRcvFlowPkts
+位20 = PortVLOpPackets:PortVLOpPackets[n]
+位21 = PortVLOpData:PortVLOpData[n]
+位22 = PortVLXmitFlowCtlUpdateErrors:PortVLXmitFlowCtlUpdateErrors[n]
+位23 = PortVLXmitWaitCounters:PortVLXmitWait[n]
+位24-47 保留
+位48 = SwPortVLCongestion:SWPortVLCongestion[n]
+位49 = PortRcvConCtrl:PortPktRcvFECN
+位50 = PortRcvConCtrl:PortPktRcvBECN
+位51 = PortSLRcvFECN:PortSLPktRcvFECN[n]
+位52 = PortSLRcvBECN:PortSLPktRcvBECN[n]
+位53 = PortXmitConCtrl:PortXmitTimeCong
+位54 = PortVLXmitTimeCong:PortVLXmitTimeCong[n]
+位55-63 保留
+
+按VL计数的性能量限于实际实现的VL数量。选择未实现量的结果为全零。
+
+有关位49-54指定的计数器的描述，参见拥塞控制附录。
+
+
+16.1.3.3 CounterSelect值
+
+表223"CounterSelect值"（第941页）列出了可在PortSamplesControl属性的CounterSelect[n]组件中使用的值，以选择要采样的特定量。
+
+可采样的量分为3个范围：
+
+• 强制量（0x0000 - 0x3FFF）。
+C16-5: 性能采样的强制量应在PortSamplesControl:PortSelect指定的端口上实现。
+
+• 可选量（0x4000 - 0xBFFF）。
+o16-1: 如果提供，性能采样的可选量应按描述实现。
+
+• 供应商定义量（0xC000 - 0xFFFF）。
+供应商定义量的语义不是本规范的一部分。供应商可以自由在此范围内实现自己的量。
+
+表223 CounterSelect值
+采样选择值    名称                    描述
+
+强制量：
+0x0000        保留                    保留
+0x0001        PortXmitData            在采样间隔期间，由PortSelect选择的端口在所有VL上传输的数据八位组总数除以4。包括数据包起始定界符和VCRC之间（不包括两者）的所有八位组，可能包括含错误的数据包。排除所有链路数据包。实现者可以选择以大于4的组计数数据八位组，但鼓励选择尽可能小的组。结果仍以4个八位组为单位报告。
+0x0002        PortRcvData             在采样间隔期间，在PortSelect选择的端口在所有VL上接收的数据八位组总数除以4。包括数据包起始定界符和VCRC之间（不包括两者）的所有八位组，可能包括含错误的数据包。排除所有链路数据包。实现者可以选择以大于4的组计数数据八位组，但鼓励选择尽可能小的组。结果仍以4个八位组为单位报告。
+0x0003        PortXmitPkts            从此端口在所有VL上传输的数据包总数。可能包括含错误的数据包，排除链路数据包。
+0x0004        PortRcvPkts             在采样间隔期间，在PortSelect选择的端口在所有VL上接收的数据包总数，包括含错误的数据包，排除链路数据包。
+0x0005        PortXmitWait            在PortSelect选择的端口有数据要发送但在整个tick期间由于信用不足或缺乏仲裁而未发送数据的tick数。
+0x0006-0x3FFF 保留                    保留
+
+可选量：
+所有在可选属性中可作为自由运行计数器使用的量也可选择性地用于在给定时段内采样。每个对应于可选运行计数器的采样计数器在每次采样时重置为零，并在采样间隔期间随所选运行计数器一起递增。对于某些量（如PortXmitQueue[n]），没有对应的可选属性。
+0x4000-0xBFFF之间未列出的所有值均为保留，采样结果为全零。
+
+0x4n00        PortXmitQueue[n]        在SampleStart定时器到期时，PortSelect选择的端口上VL "n"的发送队列深度（字节）。测量队列深度的目标是使软件能够计算数据在节点内部等待传输的平均时间。理想情况下，节点应在每个字节到达指定输出端口时递增计数器，并在每个字节从输出端口离开时递减计数器。实际上，这不可能精确实现。鼓励实现者尽可能精确地测量队列深度，并记录任何系统性测量误差。注意，实现可以通过对离开字节引入相等延迟来补偿对到达字节的固有计算延迟。
+0x4n01        PortXmitDataVL[n]       从PortSelect选择的端口在VL "n"上传输的数据八位组总数除以4。包括数据包起始和结束定界符之间的所有八位组，排除所有控制组和VCRC。实现者可以选择以大于4的组计数，但鼓励选择尽可能小的组。结果仍以4个八位组的倍数报告。
+0x4n02        PortRcvDataVL[n]        在PortSelect选择的端口上输入VL "n"上接收的数据八位组总数除以4。包括数据包起始和结束定界符之间的所有八位组，排除所有控制组和VCRC。实现者可以选择以大于4的组计数，但鼓励选择尽可能小的组。结果仍以4个八位组的倍数报告。
+0x4n03        PortXmitPktVL[n]        从PortSelect选择的端口在VL "n"上传输的数据包总数，无论是否有错误。
+0x4n04        PortRcvPktVL[n]         从PortSelect选择的端口在输入VL "n"上接收的数据包总数，无论是否有错误。
+0x4005        PortRcvErrorDetails:PortLocalPhysicalErrors  参见表228"PortRcvErrorDetails"（第951页）
+0x4006        PortRcvErrorDetails:PortMalformedPacketErrors  参见表228
+0x4007        PortRcvErrorDetails:PortBufferOverrunErrors    参见表228
+0x4008        PortRcvErrorDetails:PortDLIDMappingErrors      参见表228
+0x4009        PortRcvErrorDetails:PortVLMappingErrors        参见表228
+0x400A        PortRcvErrorDetails:PortLoopingErrors          参见表228
+0x400B        PortXmitDiscardDetails:PortInactiveDiscards    参见表229"PortXmitDiscardDetails"（第953页）
+0x400C        PortXmitDiscardDetails:PortNeighborMTUDiscards  参见表229
+0x400D        PortXmitDiscardDetails:PortSwLifetimeLimitDiscards  参见表229
+0x400E        PortXmitDiscardDetails:PortSwHOQLifetimeLimitDiscards  参见表229
+0x400F        PortOpRcvCounters:PortOpRcvPkts        参见表230"PortOpRcvCounters"（第953页）。要采样的操作码由PortSamplesControl:OpCode选择。
+0x4010        PortOpRcvCounters:PortOpRcvData        参见表230。要采样的操作码由PortSamplesControl:OpCode选择。
+0x4011        PortFlowCtlCounters:PortXmitFlowPkts  参见表231"PortFlowCtlCounters"（第954页）
+0x4012        PortFlowCtlCounters:PortRcvFlowPkts   参见表231
+0x4n13        PortVLOpPackets:PortVLOpPackets[n]     参见表232"PortVLOpPackets"（第955页）。要采样的操作码由PortSamplesControl:OpCode选择
+0x4n14        PortVLOpData:PortVLOpData[n]           参见表233"PortVLOpData"（第957页）。要采样的操作码由PortSamplesControl:OpCode选择
+0x4n15        PortVLXmitFlowCtlUpdateErrors:PortVLXmitFlowCtlUpdateErrors[n]  参见表234"PortVLXmitFlowCtlUpdateErrors"（第958页）
+0x4n16        PortVLXmitWaitCounters:PortVLXmitWait[n]  参见表235"PortVLXmitWaitCounters"（第960页）
+0x4n30        SwPortVLCongestion:SWPortVLCongestion[n]   参见表236"SwPortVLCongestion"（第962页）
+
+供应商定义量：
+0xC000-0xFFFF  保留    保留供供应商特定计数器使用
+
+
+16.1.3.4 PortSamplesResult
+
+此强制属性报告由PortSamplesControl属性控制和启动的特定采样的结果。
+
+表224 PortSamplesResult
+组件            访问   长度(位)  偏移(位)  描述
+Tag             RO     16        0        PortSamplesControl:Tag的只读副本。Tag机制为性能应用程序提供了一种在使用采样机制时检测冲突的手段。成功启动采样运行后，应用程序应等到采样应该完成，然后重复PerformanceGet(PortSamplesResult)直到SampleStatus为零。如果在任何Get之后结果中的Tag值与应用程序在运行开始时设置的值不匹配，则另一个应用程序已经启动了新的采样。在这种情况下，第一个应用程序应等待适当时间后重试其采样。
+Reserved        RO     14        16       保留
+SampleStatus    RO     2         30       PortSamplesControl:SampleStatus的只读副本。在此处提供以最小化应用程序轮询采样完成时的流量
+Counter0        RO     32        32       强制计数器。当PortSamplesControl:SampleStatus为零时，包含由PortSamplesControl:CounterSelect0选择的量的采样结果。当PortSamplesControl:SampleStatus非零时未定义。计数器中有效（最低有效）位的实际数量由PortSamplesControl:CounterWidth定义
+Counter1-14     RO     各32      64-480   可选计数器。如果未实现则全为零；否则类似于Counter0。包含由对应PortSamplesControl:CounterSelect所选量的采样结果
+
+
+16.1.3.5 PortCounters
+
+C16-6: 性能类的PortCounters属性是强制性的。PortCounters为由PortCounters:PortSelect选择的端口提供基本性能和异常统计数据。
+
+C16-7: 初始上电或复位时，节点上所有端口的所有计数器值应设置为零。运行期间，计数器应在溢出前停止在全1。在任何时候，向计数器写入（Set）零应导致计数器重置为零。
+
+注意，向计数器写入（Set）非零值会导致未定义行为。
+
+注意，虽然PortCounters是强制性的，但它包含可选组件。
+
+表225 PortCounters
+组件                    访问   长度(位)  偏移(位)  描述
+Reserved                RO     8         0        保留
+PortSelect              RW     8         8        选择报告其性能数据的端口。对于通道适配器或路由器，PortSelect指的是端口，唯一有效值是接收请求的端口号。对于交换机，PortSelect指的是交换机端口，有效值范围从0到交换机中的端口数。但是，0仅对增强型交换机管理端口有效；对于基本交换机管理端口将被忽略。如果支持同时从所有端口收集数据（参见表221"性能管理ClassPortInfo:CapabilityMask"第933页），将PortSelect设置为0xFF将导致累积所有有效端口的结果。PerformanceSet(PortCounters)中PortSelect设为0xFF时应修改CounterSelect选择的所有有效端口的计数器内容。响应PerformanceGet(PortCounters)或PerformanceSet(PortCounters)（PortSelect设为0xFF）返回的PerformanceGetResp(PortCounters)中PortCounter属性的每个组件应包含所有有效端口对应该组件的计数器值之和。选择无效端口值时，任何结果均未定义。
+CounterSelect           RW     16        16       写入（Set）时，选择受操作影响的计数器。读取（Get）时，此项被忽略。
+                                                  位0 - SymbolErrorCounter
+                                                  位1 - LinkErrorRecoveryCounter
+                                                  位2 - LinkDownedCounter
+                                                  位3 - PortRcvErrors
+                                                  位4 - PortRcvRemotePhysicalErrors
+                                                  位5 - PortRcvSwitchRelayErrors
+                                                  位6 - PortXmitDiscards
+                                                  位7 - PortXmitConstraintErrors
+                                                  位8 - PortRcvConstraintErrors
+                                                  位9 - LocalLinkIntegrityErrors
+                                                  位10 - ExcessiveBufferOverrunErrors
+                                                  位11 - VL15Dropped
+                                                  位12 - PortXmitData
+                                                  位13 - PortRcvData
+                                                  位14 - PortXmitPkts
+                                                  位15 - PortRcvPkts
+SymbolErrorCounter      RW     16        32       在一个或多个物理通道上检测到的次要链路错误总数。参见InfiniBand架构规范，卷2，链路/物理接口。
+LinkErrorRecoveryCounter RW    8         48       端口训练状态机成功完成链路错误恢复过程的总次数。参见InfiniBand架构规范，卷2，链路/物理接口。
+LinkDownedCounter       RW     8         56       链路错误恢复过程失败并导致链路断开的总次数。参见InfiniBand架构规范，卷2，链路/物理接口。
+PortRcvErrors           RW     16        64       端口上接收到的包含错误的数据包总数。这些错误包括：
+                                                  • 本地物理错误（ICRC、VCRC、FCCRC，以及导致进入数据包接收器状态机的BAD PACKET或BAD PACKET DISCARD状态的所有物理错误）
+                                                  • 格式错误的数据包错误（LVer、长度、VL）
+                                                  • 格式错误的链路数据包错误（操作数、长度、VL）
+                                                  • 由于缓冲区溢出而丢弃的数据包
+PortRcvRemotePhysicalErrors RW 16       80       端口上接收到的标记有EBP定界符的数据包总数。
+PortRcvSwitchRelayErrors RW   16        96       端口上接收到的因无法被交换机中继转发而丢弃的数据包总数。原因包括：
+                                                  • DLID映射（参见表228"PortRcvErrorDetails"第951页中PortDLIDMappingErrors的描述）
+                                                  • VL映射
+                                                  • 环路（输出端口 = 输入端口）
+PortXmitDiscards        RW     16        112      因端口关闭或拥塞而被端口丢弃的出站数据包总数。原因包括：
+                                                  • 输出端口不在活动状态
+                                                  • 数据包长度超过NeighborMTU
+                                                  • 交换机生存时间限制超时
+                                                  • 交换机HOQ生存时间限制超时
+                                                  这也可能包括在VLStalled状态期间丢弃的数据包。
+PortXmitConstraintErrors RW   8         128      因以下原因未从交换机物理端口传输的数据包总数：
+                                                  • FilterRawOutbound为true且数据包为原始数据包
+                                                  • PartitionEnforcementOutbound为true且数据包未通过分区密钥检查或IP版本检查
+PortRcvConstraintErrors  RW   8         136      交换机物理端口上接收到的因以下原因而丢弃的数据包总数：
+                                                  • FilterRawInbound为true且数据包为原始数据包
+                                                  • PartitionEnforcementInbound为true且数据包未通过分区密钥检查或IP版本检查
+Reserved                RO     8         144      保留
+LocalLinkIntegrityErrors RW   4         152      超过LocalPhyErrors指定阈值的本地物理错误次数；参见7.12.1"错误检测"（第219页）和表145"PortInfo"（第822页）。
+ExcessiveBufferOverrunErrors RW 4       156      连续流控更新周期中每个周期至少有一个溢出错误且连续出现OverrunErrors次的次数；参见7.12.1"错误检测"（第219页）和表145"PortInfo"（第822页）。
+Reserved                RO     16        160      保留
+VL15Dropped             RW     16        176      由于端口中的资源限制（例如缺少缓冲区）而丢弃的传入VL15数据包数量
+PortXmitData            RW     32        192      可选；如果未实现则应为零。从端口在所有VL上传输的数据八位组总数除以4。包括数据包起始定界符和VCRC之间（不包括两者）的所有八位组，可能包括含错误的数据包。排除所有链路数据包。实现者可以选择以大于4的组计数数据八位组，但鼓励选择尽可能小的组。结果仍以4个八位组的倍数报告。
+PortRcvData             RW     32        224      可选；如果未实现则应为零。端口在所有VL上接收的数据八位组总数除以4。包括数据包起始定界符和VCRC之间（不包括两者）的所有八位组，可能包括含错误的数据包。排除所有链路数据包。当接收的数据包长度超过C7-45:中指定的最大允许数据包长度时，计数器可能包括超过此限制的所有数据八位组。实现者可以选择以大于4的组计数数据八位组，但鼓励选择尽可能小的组。结果仍以4个八位组的倍数报告。
+PortXmitPkts            RW     32        256      可选；如果未实现则应为零。从端口在所有VL上传输的数据包总数。可能包括含错误的数据包，排除链路数据包。
+PortRcvPkts             RW     32        288      可选；如果未实现则应为零。端口从所有VL接收的数据包总数，包括含错误的数据包，排除链路数据包。
+
+
+16.1.3.6 典型性能属性使用模型
+
+本节描述了如何使用PerformanceGet()和PerformanceSet()来读取和重置性能计数器。
+
+PortSamplesControl和PortSamplesResult一起使用来采样一个或多个量在指定时间段内的值：
+
+应用程序可以首先通过PerformanceGet(PortSamplesControl)确定节点的采样能力。这将返回可用计数器的数量和宽度、可以采样的量以及基本时间间隔（tick）。从这些信息中，应用程序可以计算不会导致计数器溢出的最大采样间隔。
+
+C16-8: 此合规声明已过时并已删除。
+
+要执行采样操作，性能管理器通常执行以下步骤：
+
+• 选择SampleStart的随机值。SampleStart定时器允许性能应用程序随机化采样开始时间，确保与节点或网络事件解耦。通常使用的值为10毫秒级。
+
+• 选择一个随机Tag值。此值用于检测多个独立性能应用程序访问同一节点时的冲突。
+
+• 选择SampleInterval值、要采样的量以及将被分配来计数每个量的计数器。
+
+• 执行PerformanceSet(PortSamplesControl)。如果返回的Tag值与所选值不匹配，则另一个应用程序正在使用该采样机制。在这种情况下，第一个应用程序必须等待适当时间后重试PerformanceSet()。
+
+• 一旦采样成功启动，应用程序应等到SampleStart和SampleInterval定时器应该已过期，然后重复PerformanceGet(PortSamplesResult)直到SampleStatus为零。如果在任何时候返回的Tag值不再与应用程序选择的值匹配（无论SampleStatus如何），这意味着另一个应用程序已获得采样机制的控制权。在这种情况下，第一个应用程序可以重新启动采样过程。
+
+如果实现了多组采样机制，则使用非零的AttributeModifier值来寻址额外的机制。前述使用模型适用于每对PortSamplesControl和PortSamplesResult，将它们视为独立实体。
+
+
+16.1.4 可选属性
+
+性能管理定义了表226"可选性能管理属性"（第950页）中总结的可选属性和AttributeModifier用法。它们在表后的各节中详细描述。所有这些属性中的量也可以通过PortSamplesControl机制进行采样。可用的可选属性反映在PortSamplesControl属性的OptionMask中。
+
+所有可选计数器的行为如C16-7:（第945页）中指定的那样。
+
+o16-2: 此可选合规声明已过时并已删除。
+
+o16-2.1.1: 如果根据PortSamplesControl:OptionMask支持可选性能管理属性的任何组件，则性能管理代理应支持该属性，如表226"可选性能管理属性"（第950页）和表227"可选性能管理属性/方法映射"（第951页）中所示。
+
+表226 可选性能管理属性
+属性名称                          属性ID    属性修改器      描述
+PortRcvErrorDetails               0x0015    0x00000000    端口详细错误计数器。参见16.1.4.1"PortRcvErrorDetails"（第951页）
+PortXmitDiscardDetails            0x0016    0x00000000    端口发送丢弃计数器。参见16.1.4.2"PortXmitDiscardDetails"（第953页）
+PortOpRcvCounters                 0x0017    0x00000000    按操作码的端口接收计数器。参见16.1.4.3"PortOpRcvCounters"（第953页）
+PortFlowCtlCounters               0x0018    0x00000000    端口流控计数器。参见16.1.4.4"PortFlowCtlCounters"（第954页）
+PortVLOpPackets                   0x0019    0x00000000    按操作码按VL的端口接收数据包。参见16.1.4.5"PortVLOpPackets"（第955页）
+PortVLOpData                      0x001A    0x00000000    按操作码按VL的端口接收数据。参见16.1.4.6"PortVLOpData"（第957页）
+PortVLXmitFlowCtlUpdateErrors     0x001B    0x00000000    按VL的端口流控更新错误。参见16.1.4.7"PortVLXmitFlowCtlUpdateErrors"（第958页）
+PortVLXmitWaitCounters            0x001C    0x00000000    按VL的端口等待发送Tick计数器。参见16.1.4.8"PortVLXmitWaitCounters"（第960页）
+PortCountersExtended              0x001D    0x00000000    扩展端口基本性能和错误计数器。参见16.1.4.11"PortCountersExtended"（第965页）
+PortSamplesResultExtended         0x001E    0x00000000    扩展端口性能数据采样结果。参见16.1.4.10"PortSamplesResultExtended"（第963页）
+SwPortVLCongestion                0x0030    0x00000000    按VL的交换机端口拥塞。参见16.1.4.9"SwPortVLCongestion"（第962页）
+
+表227 可选性能管理属性/方法映射
+属性名称                          PerformanceGet()  PerformanceSet()
+PortRcvErrorDetails               X                 X
+PortXmitDiscardDetails            X                 X
+PortOpRcvCounters                 X                 X
+PortFlowCtlCounters               X                 X
+PortVLOpPackets                   X                 X
+PortVLOpData                      X                 X
+PortVLXmitFlowCtlUpdateErrors     X                 X
+PortVLXmitWaitCounters            X                 X
+PortSamplesResultExtended         X                 X
+PortCountersExtended              X                 X
+SwPortVLCongestion                X                 X
+
+
+16.1.4.1 PortRcvErrorDetails
+
+表228 PortRcvErrorDetails
+组件                        访问   长度(位)  偏移(位)  描述
+Reserved                    RO     8         0        保留
+PortSelect                  RW     8         8        选择报告统计数据的端口，如表222"PortSamplesControl"（第934页）中定义。统计数据在端口的所有VL上累积。如果支持同时从所有端口收集数据（参见表221"性能管理ClassPortInfo:CapabilityMask"第933页），将PortSelect设为0xFF将导致累积所有有效端口的数据。选择无效端口值时，任何结果均未定义。
+CounterSelect               RW     16        16       写入（Set）时，选择哪些计数器被其对应字段中指定的值覆盖。读取（Get）时忽略。
+                                                      位0 - PortLocalPhysicalErrors
+                                                      位1 - PortMalformedPacketErrors
+                                                      位2 - PortBufferOverrunErrors
+                                                      位3 - PortDLIDMappingErrors
+                                                      位4 - PortVLMappingErrors
+                                                      位5 - PortLoopingErrors
+                                                      位6到15 - 保留
+PortLocalPhysicalErrors     RW     16        32       端口上接收到的包含本地物理错误的数据包总数（ICRC、VCRC、FCCRC，以及导致进入数据包接收器状态机的BAD PACKET或BAD PACKET DISCARD状态的所有物理错误）。
+PortMalformedPacketErrors   RW     16        48       端口上接收到的包含格式错误的数据包总数
+                                                      • 数据包：LVer、长度、VL
+                                                      • 链路数据包：操作数、长度、VL
+PortBufferOverrunErrors     RW     16        64       端口上接收到的因缓冲区溢出而丢弃的数据包总数。
+PortDLIDMappingErrors       RW     16        80       端口上接收到的因DLID映射错误无法被交换机中继转发而丢弃的数据包总数。DLID映射错误发生在(a) DLID_Check=invalid（如图52"数据包检查机"第176页中规定）；或(b)因C18-36:、C18-40:、C18-41:和C18-51:中指定的任何丢弃原因。此项仅适用于交换机。
+PortVLMappingErrors         RW     16        96       因VL映射行为导致的数据包丢弃不被视为错误，因此此计数器的行为取决于实现。但建议使用此计数器来计数端口上接收到的因VL映射行为无法被交换机中继转发而丢弃的数据包总数。参见7.6.6"子网内的VL映射"（第186页）
+PortLoopingErrors           RW     16        112      端口上接收到的因环路错误（输出端口 = 输入端口）无法被交换机中继转发而丢弃的数据包总数。此项仅适用于交换机。
+
+
+16.1.4.2 PortXmitDiscardDetails
+
+表229 PortXmitDiscardDetails
+组件                          访问   长度(位)  偏移(位)  描述
+Reserved                      RO     8         0        保留
+PortSelect                    RW     8         8        选择报告统计数据的端口，如表222"PortSamplesControl"中定义。统计数据在端口的所有VL上累积。如果支持同时从所有端口收集数据，将PortSelect设为0xFF将累积所有有效端口的数据。选择无效端口值时，任何结果均未定义。
+CounterSelect                 RW     16        16       写入（Set）时，选择哪些计数器被覆盖。读取（Get）时忽略。
+                                                        位0 - PortInactiveDiscards
+                                                        位1 - PortNeighborMTUDiscards
+                                                        位2 - PortSwLifetimeLimitDiscards
+                                                        位3 - PortSwHOQLifetimeLimitDiscards
+                                                        位4到15 - 保留
+PortInactiveDiscards          RW     16        32       因端口不在活动状态而被丢弃的出站数据包总数。
+PortNeighborMTUDiscards       RW     16        48       因数据包长度超过PortInfo:NeighborMTU而被端口丢弃的出站数据包总数。
+PortSwLifetimeLimitDiscards   RW     16        64       因交换机生存时间限制超时而被端口丢弃的出站数据包总数。仅适用于交换机。
+PortSwHOQLifetimeLimitDiscards RW    16        80       因交换机HOQ生存时间限制超时而被端口丢弃的出站数据包总数。仅适用于交换机。
+
+
+16.1.4.3 PortOpRcvCounters
+
+表230 PortOpRcvCounters
+组件            访问   长度(位)  偏移(位)  描述
+OpCode          RW     8         0        选择报告统计数据的操作码（如BTH中所见）。0xFF表示所有操作码。
+PortSelect      RW     8         8        选择报告统计数据的端口，如表222中定义。统计数据在端口的所有VL上累积。如果支持同时从所有端口收集数据，将PortSelect设为0xFF将累积所有有效端口的数据。选择无效端口值时，任何结果均未定义。
+CounterSelect   RW     16        16       写入时选择哪些计数器被覆盖。读取时忽略。
+                                          位0 - PortOpRcvPkts
+                                          位1 - PortOpRcvData
+                                          位2到15 - 保留
+PortOpRcvPkts   RW     32        32       在PortSelect选择的端口上无错误接收的、包含OpCode选择的操作码的数据包总数。
+PortOpRcvData   RW     32        64       在PortSelect选择的端口上从所有VL无错误接收的、包含OpCode选择的操作码的数据八位组总数除以4。包括数据包起始定界符和VCRC之间（不包括两者）的所有八位组。排除所有链路数据包。实现者可以选择以大于4的组计数，但鼓励选择尽可能小的组。结果仍以4个八位组的倍数报告。
+
+
+16.1.4.4 PortFlowCtlCounters
+
+表231 PortFlowCtlCounters
+组件              访问   长度(位)  偏移(位)  描述
+Reserved          RO     8         0        保留
+PortSelect        RW     8         8        选择报告统计数据的端口，如表222中定义。如果支持同时从所有端口收集数据，将PortSelect设为0xFF将累积所有有效端口的数据。选择无效端口值时，任何结果均未定义。
+CounterSelect     RW     16        16       写入时选择覆盖的计数器。读取时忽略。
+                                            位0 - PortXmitFlowPkts
+                                            位1 - PortRcvFlowPkts
+                                            位2到15 - 保留
+PortXmitFlowPkts  RW     32        32       在PortSelect选择的端口上传输的流控数据包总数
+PortRcvFlowPkts   RW     32        64       在PortSelect选择的端口上接收的流控数据包总数
+
+
+16.1.4.5 PortVLOpPackets
+
+表232 PortVLOpPackets
+组件              访问   长度(位)  偏移(位)  描述
+OpCode            RW     8         0        选择报告统计数据的操作码（如BTH中所见）。0xFF表示所有操作码。
+PortSelect        RW     8         8        选择报告统计数据的端口，如表222中定义。如果支持同时从所有端口收集数据，将PortSelect设为0xFF将累积所有有效端口的数据。选择无效端口值时，任何结果均未定义。
+CounterSelect     RW     16        16       写入时选择覆盖的计数器。读取时忽略。
+                                            位0-15分别对应PortVLOpPackets0到PortVLOpPackets15
+PortVLOpPackets0  RW     16        32       在PortSelect选择的端口上VL 0上无错误接收的、包含OpCode选择的操作码的数据包总数
+PortVLOpPackets1-15 RW   各16      48-272   VL1到VL15的类似计数
+
+
+16.1.4.6 PortVLOpData
+
+表233 PortVLOpData
+组件            访问   长度(位)  偏移(位)  描述
+OpCode          RW     8         0        选择报告统计数据的操作码。0xFF表示所有操作码。
+PortSelect      RW     8         8        选择报告统计数据的端口。如果支持同时从所有端口收集数据，将PortSelect设为0xFF将累积所有有效端口的数据。选择无效端口值时，任何结果均未定义。
+CounterSelect   RW     16        16       写入时选择覆盖的计数器。读取时忽略。
+                                          位0-15分别对应PortVLOpData0到PortVLOpData15
+PortVLOpData0   RW     32        32       从PortSelect选择的端口上VL 0上无错误接收的、包含OpCode选择的操作码的数据八位组总数除以4。包括数据包起始和VCRC之间（不包括两者）的所有八位组。排除所有链路数据包。实现者可以选择以大于4的组计数，但鼓励选择尽可能小的组。结果仍以4个八位组的倍数报告。
+PortVLOpData1-15 RW    各32      64-512   VL1到VL15的类似计数
+
+
+16.1.4.7 PortVLXmitFlowCtlUpdateErrors
+
+表234 PortVLXmitFlowCtlUpdateErrors
+组件                              访问   长度(位)  偏移(位)  描述
+Reserved                          RO     8         0        保留
+PortSelect                        RW     8         8        选择报告统计数据的端口。如果支持同时从所有端口收集数据，将PortSelect设为0xFF将累积所有有效端口的数据。选择无效端口值时，任何结果均未定义。
+CounterSelect                     RW     16        16       写入时选择覆盖的计数器。读取时忽略。
+                                                            位0-15分别对应PortVLXmitFlowCtlUpdateErrors0到PortVLXmitFlowCtlUpdateErrors15
+PortVLXmitFlowCtlUpdateErrors0    RW     2         32       PortSelect选择的端口上VL 0的流控更新错误总数
+PortVLXmitFlowCtlUpdateErrors1-15 RW     各2       34-62    VL1到VL15的类似计数
+
+
+16.1.4.8 PortVLXmitWaitCounters
+
+表235 PortVLXmitWaitCounters
+组件              访问   长度(位)  偏移(位)  描述
+Reserved          RO     8         0        保留
+PortSelect        RW     8         8        选择报告统计数据的端口。如果支持同时从所有端口收集数据，将PortSelect设为0xFF将累积所有有效端口的数据。选择无效端口值时，任何结果均未定义。
+CounterSelect     RW     16        16       写入时选择覆盖的计数器。读取时忽略。
+                                            位0-15分别对应PortVLXmitWait0到PortVLXmitWait15
+PortVLXmitWait0   RW     16        32       在PortSelect选择的端口上，VL0有数据要发送但在整个tick期间由于信用不足或缺乏仲裁而未发送数据的tick总数。
+PortVLXmitWait1-15 RW    各16      48-272   VL1到VL15的类似计数
+
+
+16.1.4.9 SwPortVLCongestion
+
+o16-2.1.2: SwPortVLCongestion不应由交换机以外的节点支持。
+
+表236 SwPortVLCongestion
+组件                  访问   长度(位)  偏移(位)  描述
+Reserved              RO     8         0        保留
+PortSelect            RW     8         8        选择报告统计数据的端口。如果支持同时从所有端口收集数据，将PortSelect设为0xFF将累积所有有效端口的数据。选择无效端口值时，任何结果均未定义。
+CounterSelect         RW     16        16       写入时选择覆盖的计数器。读取时忽略。
+                                                位0-15分别对应SWPortVLCongestion0到SWPortVLCongestion15
+SWPortVLCongestion0   RW     16        32       在PortSelect选择的输出端口上VL 0上因拥塞而丢弃的待发送数据包总数。包括以下原因：
+                                                • 交换机生存时间限制超时
+                                                • 交换机HOQ生存时间限制超时
+SWPortVLCongestion1-15 RW    各16      48-272   VL1到VL15的类似计数
+
+
+16.1.4.10 PortSamplesResultExtended
+
+表237 PortSamplesResultExtended
+组件              访问   长度(位)  偏移(位)  描述
+Tag               RO     16        0        语义与PortSamplesResult组件Tag（第944页）相同
+Reserved          RO     14        16       保留
+SampleStatus      RO     2         30       语义与PortSamplesResult组件SampleStatus（第944页）相同
+ExtendedWidth     RO     2         32       表示PortSamplesResultExtended:Counter0到14（如果支持）的实际位宽。如果IsExtendedWidthSupported能力位为0则忽略。
+                                            • 00 = 保留
+                                            • 01 = 48位
+                                            • 10 = 64位
+                                            • 11 = 保留
+                                            小于64位的计数器应作为对应64位属性组件的最低有效位实现，未实现的高位在Get()时返回零，在Set()时忽略。
+Reserved          RO     32        32       保留
+Counter0          RO     64        64       语义与PortSamplesResult组件Counter0（第944页）相同
+Counter1-14       RO     各64      128-960  语义与PortSamplesResult对应Counter组件相同
+
+
+16.1.4.11 PortCountersExtended
+
+表238 PortCountersExtended（注：原文表标题为PortSamplesResultExtended，但实际内容为PortCountersExtended）
+组件                  访问   长度(位)  偏移(位)  描述
+Reserved              RO     8         0        保留
+PortSelect            RW     8         8        语义与PortCounters组件PortSelect（第946页）相同
+CounterSelect         RW     16        16       写入（Set()）时，选择受操作影响的计数器。读取（Get()）时忽略。
+                                                • 位0 - PortXmitData
+                                                • 位1 - PortRcvData
+                                                • 位2 - PortXmitPkts
+                                                • 位3 - PortRcvPkts
+                                                • 位4 - PortUnicastXmitPkts
+                                                • 位5 - PortUnicastRcvPkts
+                                                • 位6 - PortMulticastXmitPkts
+                                                • 位7 - PortMulticastRcvPkts
+                                                • 位8-15 - 保留
+Reserved              RO     32        32       保留
+PortXmitData          RW     64        64       语义与PortCounters组件PortXmitData（第948页）相同，但如果支持此属性，则此组件不是可选的。
+PortRcvData           RW     64        128      语义与PortCounters组件PortRcvData（第948页）相同，但如果支持此属性，则此组件不是可选的。
+PortXmitPkts          RW     64        192      语义与PortCounters组件PortXmitPkts（第948页）相同，但如果支持此属性，则此组件不是可选的。
+PortRcvPkts           RW     64        256      语义与PortCounters组件PortRcvPkts（第948页）相同，但如果支持此属性，则此组件不是可选的。
+PortUnicastXmitPkts   RW     64        320      从端口在所有VL上传输的单播数据包总数。可能包括含错误的单播数据包，排除链路数据包。
+PortUnicastRcvPkts    RW     64        384      端口从所有VL接收的单播数据包总数，包括含错误的单播数据包，排除链路数据包。
+PortMultiCastXmitPkts RW     64        448      从端口在所有VL上传输的多播数据包总数。可能包括含错误的多播数据包。
+PortMultiCastRcvPkts  RW     64        512      端口从所有VL接收的多播数据包总数，包括含错误的多播数据包。
+
+
+16.1.5 性能管理状态
+
+本节提供了第13章"管理模型"（第709页）、第14章"子网管理"（第794页）和第16章"通用服务"（第930页）中大量状态码相关合规声明的整合解释。此处提供仅为辅助互操作性，不是规范的一部分。
+
+在以下各节中，指定了错误状态定义。此定义提供了报告SMP（或PM GMP）错误的最低要求。请注意，遵循此定义将满足所有IB合规规则。超出本节规定的任何额外错误条件和错误处理（不违反任何IB合规规则）被视为额外工作，因此对实现是可选的。
+
+
+16.1.5.1 强制PM属性状态
+
+在此实现中，各种状态设置之间存在隐含优先级。状态值越高，优先级越低。注意，此状态优先级方法仅是一种可能的实现。其他实现可能存在。此实现不违反也不覆盖任何已定义的合规规则。其他实现可能返回错误状态而不遵循此状态优先级。如果检测到多个错误，则GetResp()中可能返回任何错误状态位。
+
+表239 强制PM属性状态
+优先级(0x1最高)  Status[4:2]  违规
+1                0x1          BaseVersion、ClassVersion或其组合不被供应商支持。
+2                0x2          收到的请求数据包的方法既不是PerformanceGet()也不是PerformanceSet()。此数据包可能在无响应的情况下被丢弃，或以状态2返回（方法字段的"R"位设为1，不考虑方法字段的整体含义），或以PerformanceGetResp()返回状态2。
+3                0x3          不在表240（第967页）中列出的任何方法/属性组合中。
+4                0x7          包含至少一个无效组件和/或AttributeModifier。详见后续各节。
+5                0x0          未发现上述任何违规。
+
+表240 有效的强制PM方法/属性组合
+属性名称            方法
+ClassPortInfo       PerformanceGet()
+PortSamplesControl  PerformanceGet()或PerformanceSet()
+PortSamplesResult   PerformanceGet()
+PortCounters        PerformanceGet()或PerformanceSet()
+
+
+16.1.5.1.1 PM AttributeModifier错误
+
+表241 PM AttributeModifier错误
+属性名称            AttributeModifier违规
+ClassPortInfo       AttributeModifier != 0x0000_0000
+PortSamplesControl  SampleMechanisms < AttributeModifier < 0xFFFF_FFFE
+PortSamplesResult   SampleMechanisms < AttributeModifier < 0xFFFF_FFFE
+PortCounters        AttributeModifier != 0x0000_0000
+
+
+16.1.5.1.2 PM属性组件错误（Status[4:2] = 0x7）
+
+表242 PerformanceSet(ClassPortInfo)组件错误
+违规：无
+
+表243 PerformanceSet(PortSamplesControl)组件错误
+属性组件      违规
+OpCode(a)     任何保留的OpCode值（多个保留范围）
+              任何不支持的供应商特定OpCode
+PortSelect    PortSelect = 0x00(b)
+              0xFF > PortSelect > NodeInfo:NumPorts
+              PortSelect = 0xFF(c)
+a. 仅在采样操作码特定的可选量时适用。
+b. 仅当EnhancedPort0 = 0时适用。
+c. 仅当AllPortSelect = 0时适用。
+
+表244 PerformanceSet(PortSamplesResult)组件错误
+违规：无
+
+表245 PerformanceSet(PortCounters)组件错误
+属性组件      违规
+PortSelect    PortSelect = 0x00(a)
+              0xFF > PortSelect > NodeInfo:NumPorts
+              PortSelect = 0xFF(b)
+a. 仅当EnhancedPort0 = 0时适用。
+b. 仅当AllPortSelect = 0时适用。
+
+
+16.1.5.2 可选PM属性状态
+
+在此实现中，各种状态设置之间存在隐含优先级。状态值越高，优先级越低。此状态优先级实现仅是一种可能的实现。它不违反也不覆盖任何已定义的合规规则。其他实现可能返回错误状态而不遵循此状态优先级。如果检测到多个错误，则GetResp()中可能返回任何错误状态位。
+
+表246 可选PM属性状态
+优先级(0x1最高)  Status[4:2]  违规
+1                0x1          BaseVersion、ClassVersion或其组合不被供应商支持。
+2                0x2          不是PerformanceGet()或PerformanceSet()。基于当前规范，此错误无法报告，数据包将被丢弃。
+3                0x3          不在表247（第969页）中列出的任何方法/属性组合中。
+4                0x7          包含至少一个无效组件和/或AttributeModifier。详见后续各节。
+5                0x0          未发现上述任何违规。
+
+表247 有效的可选PM方法/属性组合
+属性名称                          方法
+PortRcvErrorDetails               PerformanceGet()或PerformanceSet()
+PortXmitDiscardDetails            PerformanceGet()或PerformanceSet()
+PortOpRcvCounters                 PerformanceGet()或PerformanceSet()
+PortFlowCtlCounters               PerformanceGet()或PerformanceSet()
+PortVLOpPackets                   PerformanceGet()或PerformanceSet()
+PortVLOpData                      PerformanceGet()或PerformanceSet()
+PortVLXmitFlowCtlUpdateErrors     PerformanceGet()或PerformanceSet()
+PortVLXmitWaitCounters            PerformanceGet()或PerformanceSet()
+SwPortVLCongestion                PerformanceGet()或PerformanceSet()
+
+
+16.1.5.2.1 PM AttributeModifier错误（Status[4:2] = 0x7）
+
+表248 PM AttributeModifier错误
+属性名称                          AttributeModifier违规
+PortRcvErrorDetails               AttributeModifier != 0x0000_0000
+PortXmitDiscardDetails            AttributeModifier != 0x0000_0000
+PortOpRcvCounters                 AttributeModifier != 0x0000_0000
+PortFlowCtlCounters               AttributeModifier != 0x0000_0000
+PortVLOpPackets                   AttributeModifier != 0x0000_0000
+PortVLOpData                      AttributeModifier != 0x0000_0000
+PortVLXmitFlowCtlUpdateErrors     AttributeModifier != 0x0000_0000
+PortVLXmitWaitCounters            AttributeModifier != 0x0000_0000
+SwPortVLCongestion                AttributeModifier != 0x0000_0000
+
+
+16.1.5.2.2 PM属性组件错误（Status[4:2] = 0x7）
+
+表249-257列出了各可选属性的PerformanceSet组件错误。所有属性的PortSelect违规规则相同：
+• PortSelect = 0x00（仅当EnhancedPort0 = 0时）
+• 0xFF > PortSelect > NodeInfo:NumPorts
+• PortSelect = 0xFF（仅当AllPortSelect = 0时）
+
+对于包含OpCode的属性（PortOpRcvCounters、PortVLOpPackets、PortVLOpData），还有保留OpCode值的违规。
+
+对于包含CounterSelect的属性，保留位设为1也构成违规。各属性的具体保留位范围不同。
+
+
+16.2 基板管理
+
+C16-9: 所有节点应具有基板管理代理（Baseboard Management Agent）。
+
+C16-9.1.1: 基板管理器（BM）应通过SubnAdmSet(ServiceRecords)向SA注册其服务，使用ServiceName "BaseboardManager.IBTA"。参见15.2.5.14"ServiceRecord"（第895页）和附录"应用程序特定标识符"中的服务名称。
+
+本节描述了用于在网络中传输基板管理命令的管理数据报。有关IB模块、非模块（封装形式不同于IB模块规格的IB设备）和机箱的硬件管理的更多信息，参见InfiniBand架构规范，卷2，"硬件管理"章节。此处呈现简化概述。
+
+SM和SMA在图199"基板管理架构"（第974页）中显示，仅用于表明基板管理和子网管理是网络中独立的、分离的实体，提供不重叠的功能。
+
+基板管理器是通过基板管理消息管理硬件的软件实体。这些消息从BM通过IBA网络隧道传输（封装在MAD中）到基板管理代理（BMA），BMA识别消息并将其转发到模块管理实体（MME）。MME处理嵌入的基板管理命令。在某些情况下，这会导致MME在存在的InfiniBand管理链路（IB-ML）上生成相应的消息和事务。IB-ML消息可以与存在的机箱管理实体（CME）接口。
+
+BM可以使用子网管理来检索关于IBA子网中发现的节点的信息，如地址、能力、类型。
+
+子网管理提供所有IBA端节点共有的基本发现信息，无论子网中端节点的类型如何。它不提供超出此范围的信息，如VPD、机箱管理数据和基板管理控制下的任何其他信息。这些信息通过基板管理"发现"。
+
+基板管理单元可以是IBA规范卷2中定义的IB模块、不同于卷2定义的形式因素（非模块）、或受管机箱。
+
+图199 基板管理架构
+[InfiniBand子网中的BM、BMA、SMA、SM、MME、CME等组件的关系图]
+
+管理MAD使用模块上任何端口的LID寻址。受管机箱可能包含处理基板管理MAD发送/接收的交换机。MAD使用交换机的LID寻址。
+
+
+16.2.1 MAD格式
+
+C16-10: 基板管理类中的数据报应符合13.4"管理数据报"（第717页）中规定的MAD格式和使用方式，并进一步按照图200"基板管理MAD格式"（第975页）和表258"基板管理MAD字段"（第975页）进行定制。
+
+字节 位31-24 位23-16 位15-8 位7-0
+0    公共MAD头部
+...
+20
+24   B_Key
+28-32 保留
+...
+60-64 数据
+...
+252
+
+图200 基板管理MAD格式
+
+表258 基板管理MAD字段
+字段名称          长度      描述
+公共MAD头部      24字节    如13.4.2"管理数据报格式"（第718页）中描述
+B_Key            8字节     BM特定密钥。定义和使用参见16.2.4"B_Key通用使用"（第982页）
+保留              32字节    保留
+基板管理数据      192字节   属性数据如InfiniBand架构规范卷2，管理命令部分中定义，由属性ID和AttributeModifier细化。有效属性ID和修改器值参见表261"基板管理属性"（第978页）
+
+
+16.2.1.1 Status字段
+
+Status字段在13.4.7"Status字段"（第731页）中描述。未定义类特定位。
+
+
+16.2.2 方法
+
+基板管理类使用13.4.5"管理类方法"（第721页）中描述的公共方法的子集。
+
+C16-10.1.1: 基板管理代理应支持表260"基板管理方法"（第976页）中列出的方法。表中未列出的所有方法类型值均为保留。
+
+图201和图202分别展示了BM发起和IB-ML发起的命令事务示例。
+
+表259 基板管理Status字段
+位      名称   含义
+0-7     -      如13.4.7"Status字段"（第731页）中定义的公共位
+8-15    -      类特定位为保留
+
+表260 基板管理方法
+方法              类型值   描述
+BMGet()           0x01    请求获取（读取）属性
+BMSet()           0x02    请求设置（写入）属性
+BMGetResp()       0x81    对Get()或Set()请求的响应
+BMSend()          0x03    发送基板管理属性（可以是封装的基板管理请求[命令]或响应的属性）
+BMTrap()          0x05    通知事件发生
+BMTrapRepress()   0x07    阻止通知重复
+BMReport()        0x06    转发先前订阅的事件
+BMReportResp()    0x86    对BMReport()方法的回复
+
+请求和响应能力是对称的；即BMSend()可用于从MME发送请求以及响应。类似地，基板管理器可以使用BMSend()传递响应。
+
+
+16.2.3 属性
+
+C16-10.1.2: 基板管理代理应支持表261"基板管理属性"（第978页）、表262"基板管理属性/方法映射"（第979页）和InfiniBand架构规范卷2"硬件管理"章节中列出的属性。表261中未列出的所有属性ID均为保留。
+
+表261 基板管理属性
+属性名称              属性ID    属性修改器(a)                描述
+ClassPortInfo         0x0001    0x00000000                  BM类的通用和端口特定信息。参见16.2.3.1"ClassPortInfo"（第980页）
+Notice                0x0002    0x00000000                  关于陷阱的信息。参见16.2.3.2"Notice"（第980页）
+BKeyInfo              0x0010    0x00000000                  节点的B_Key信息。参见16.2.3.3"BKeyInfo"（第982页）
+WriteVPD              0x0020    0x00000000/0x00000001       参见InfiniBand架构规范卷2"硬件管理"章节的所有这些属性
+ReadVPD               0x0021    0x00000000/0x00000001
+ResetIBML             0x0022    0x00000000/0x00000001
+SetModulePMControl    0x0023    0x00000000/0x00000001
+GetModulePMControl    0x0024    0x00000000/0x00000001
+SetUnitPMControl      0x0025    0x00000000/0x00000001
+GetUnitPMControl      0x0026    0x00000000/0x00000001
+SetIOCPMControl       0x0027    0x00000000/0x00000001
+GetIOCPMControl       0x0028    0x00000000/0x00000001
+SetModuleState        0x0029    0x00000000/0x00000001
+SetModuleAttention    0x002A    0x00000000/0x00000001
+GetModuleStatus       0x002B    0x00000000/0x00000001
+IB2IBML               0x002C    0x00000000/0x00000001
+IB2CME                0x002D    0x00000000/0x00000001
+IB2MME                0x002E    0x00000000/0x00000001
+OEM                   0x002F    0x00000000/0x00000001
+a. 列出两个AttributeModifier时，AttributeModifier的最低有效位用于区分BMSend()请求和响应。详情参见InfiniBand架构规范卷2"硬件管理"章节。
+
+表262 基板管理属性/方法映射
+属性名称              BMGet()  BMSet()  BMSend()  BMTrap()
+ClassPortInfo         X        X
+Notice                                 X         X         X
+BKeyInfo              X        X
+WriteVPD                                X
+ReadVPD                                 X
+ResetIBML                               X
+SetModulePMControl                      X
+GetModulePMControl                      X
+SetUnitPMControl                        X
+GetUnitPMControl                        X
+SetIOCPMControl                         X
+GetIOCPMControl                         X
+SetModuleState                          X
+SetModuleAttention                      X
+GetModuleStatus                         X
+IB2IBML                                 X
+IB2CME                                  X
+IB2MME                                  X
+OEM                                     X
+
+
+16.2.3.1 ClassPortInfo
+
+ClassPortInfo属性在13.4.8.1"ClassPortInfo"（第734页）中描述。基板管理ClassPortInfo:CapabilityMask的类特定位在表263中定义。
+
+表263 基板管理ClassPortInfo:CapabilityMask
+位      名称              含义
+0-7     -                如13.4.8.1"ClassPortInfo"（第734页）中定义的公共位
+8       IsIBMLSupported  支持直接访问IB-ML
+9       IsBKeyNVRAM      B_Key在NVRAM中
+10-15   保留
+
+
+16.2.3.2 Notice
+
+Notice属性在13.4.8.2"Notice"（第737页）中描述。
+
+表264 基板管理陷阱
+名称            类型        编号   数据详情
+BKeyViolation   安全        259    错误的B_Key，来自<LIDADDR>/<GIDADDR>/<QP>的<B_Key>尝试使用<ATTRIBUTEID>和<ATTRIBUTEMODIFIER>执行<METHOD>
+BMTraps         信息性      260    <BMTrapDataLength> <BMTrapType> <BMTrapTypeModifier> <BMTrapData>
+
+表265 Trap 259的Notice DataDetails
+字段              长度(位)   描述
+LIDADDR           16         本地标识符
+METHOD            8          方法
+Reserved          8          保留
+ATTRIBUTEID       16         属性ID
+ATTRIBUTEMODIFIER 32         属性修改器
+Reserved          8          保留
+QP                24         队列对
+BKEY              64         B_Key
+GIDADDR           128        全局标识符。如果违规数据包中没有GRH，此字段应填充零。
+Padding           128        读取时应忽略。内容未指定。
+
+表266 Trap 260的Notice DataDetails
+字段                长度(位)   描述
+BMTrapDataLength    8          包含的TrapData字节数
+BMTrapType          8          表示陷阱原因：0x00=通用MME，0x01=OEM MME，0x02=CME_RTR，0x03=WRE，0x04=通用CME，0x05=OEM CME，其他保留
+BMTrapTypeModifier  24         根据TrapType变化
+BMTrapData          8*TrapDataLength  OEM MME或OEM CME的TrapType数据字节
+Padding             392-(8*TrapDataLength)  读取时应忽略。内容未指定。
+
+
+16.2.3.3 BKeyInfo
+
+表267 BKeyInfo
+组件              访问   长度(位)  偏移(位)  描述
+B_Key             RW     64        0        所有有效BM在所有BM MAD中使用的8字节基板管理密钥。值0表示BMA从不进行B_Key检查。
+B_KeyProtectBit   RW     1         64       详见16.2.4.3"B_Key操作"（第984页）
+Reserved          RW     15        65       保留
+B_KeyLeasePeriod  RW     16        80       定时器值，用于指示B_Key ProtectBit在因B_Key检查失败而丢弃BMSet(BKeyInfo) MAD后保持非零的时间长度。定时器值表示租约期的秒数。使用16位计数器，周期可从1秒到约18小时。0应表示无限期。详见16.2.4.5"B_Key恢复"（第984页）
+B_KeyViolations   RO     16        96       自上电或复位以来在此节点收到的因B_Key检查失败而被丢弃的MAD数量（如果实现了此类计数器）。否则应为0xFFFF。
+
+
+16.2.3.4 IB-ML属性
+
+参见InfiniBand架构规范卷2"硬件管理"章节"管理命令"部分，了解BM类特定属性及其格式的描述。
+
+
+16.2.4 B_Key通用使用
+
+BM在BM MAD中包含基板管理密钥（B_Key）以获取授权。B_Key用于验证受信任的源。此模型假设网络具有一定级别的物理安全性。
+
+1）为了对每个节点使用正确的密钥，BM或更高级别的B_Key管理器跟踪其正在管理的节点的密钥。
+2）如果存在备份BM，它共享B_Key以便于故障转移。
+3）BM可以通过使用仅该BM和特定节点知道的B_Key来独占访问一组节点。由于节点使用自己的B_Key回复基板管理器的请求，如果基板管理器为其管理域中的设备分配了多个B_Key，则需要在其HCA上运行，该HCA的BMA可以响应所有此类B_Key。
+4）BM使用一个BMSet(BkeyInfo) MAD设置BKeyInfo属性中的B_Key、B_KeyProtectBit和B_KeyLeasePeriod。此分配的成功完成向BM表明它已获得节点的所有权。
+
+
+16.2.4.1 B_Key保护范围（本节在16.2.4.2中）
+
+每个节点中的BMA有一个B_Key。表268"B_Key保护范围"（第983页）显示了该B_Key保护的范围。语义在InfiniBand架构规范卷2"硬件管理"章节中明确定义。
+
+表268 B_Key保护范围
+源                目标实体                  保护
+BM               读写ClassPortInfo和BKeyInfo  是
+BM               导致对IB-ML读写的属性      是
+IB-ML受管单元    导致对IB-ML读写的属性      否
+
+
+16.2.4.3 B_Key操作
+
+C16-11: BMA应检查传入MAD中包含的B_Key。检查的成功和效果取决于BMA的BKeyInfo:B_Key和BKeyInfo:B_KeyProtectBit的值以及传入MAD中包含的方法和属性。
+
+表269 B_Key检查
+BMA的B_Key   BMA的B_Key保护位   MAD的方法                成功
+零           任意               任意                     是
+非零         任意               BMSet(), BMSend()        如果MAD的B_Key等于BMA的B_Key
+非零         0                  BMGet()                  是
+非零         1                  BMGet()                  是(a)
+a. 即使检查成功，BKeyInfo属性中的B_Key值也应返回零。
+
+C16-12: 如果B_Key检查失败，BMA应：
+1）丢弃该MAD。
+2）如果支持，递增B_Key违规计数器。
+3）如果BMA支持陷阱，发送BKeyViolation陷阱。
+4）用B_Key租约期值启动倒计时定时器。
+
+
+16.2.4.4 B_Key初始化
+
+C16-13: 上电或复位时，如果不使用NVRAM，BKeyInfo:B_Key、BKeyInfo:B_KeyProtectBit和BKeyInfo:B_KeyLeasePeriod应设置为零；否则应设置为NVRAM中存储的值。
+
+如果B_Key相关组件未存储在NVRAM中，BKeyInfo:B_Key、BKeyInfo:B_KeyProtectBit和BKeyInfo:B_KeyLeasePeriod组件可由BM设置。
+
+
+16.2.4.5 B_Key恢复
+
+B_Key租约期定时器在B_Key检查失败时启动。此时，节点向BM发送陷阱（如果支持陷阱且BM已将其信息存储在ClassPortInfo属性的陷阱组件中）。此陷阱作为请求BM刷新租约期的定时器并重新武装它。
+
+如果最初设置B_Key的BM已消失，则租约期过期——清除BKeyInfo:B_KeyProtectBit并允许任何人读取（然后设置）BkeyInfo:B_Key。
+
+在节点以NVRAM启动、BKeyInfo:B_Key和BKeyInfo:B_KeyProtectBit已设置且TrapLID为零（因为没有BM来设置它）的情况下，节点没有BM可以发送陷阱。在这种情况下，节点不发送陷阱，租约期定时器将过期，最终被新BM接管。
+
+通过BMGet(BKeyInfo)，任何BM可以基于BKeyInfo:B_KeyProtectBit检测BKeyInfo:B_Key是否已设置（虽然隐藏）。如果B_KeyProtectBit已设置，则B_Key已设置且隐藏。否则返回的B_Key是真实值，即使为零。
+
+
+16.2.4.6 保护级别
+
+根据系统要求，有四种不同的基于B_Key的保护级别。
+
+表270 保护级别
+B_Key    B_KeyProtectBit  B_KeyLeasePeriod  描述
+0        任意             任意              不提供保护。任何BM可以发出Set和Send。
+非零     0                不适用           提供保护，但允许BM读取节点中的BKeyInfo:B_Key。
+非零     1                非零             提供保护且不允许任何人读取节点中的B_Key，直到租约期过期。B_Key租约期是一种仅在给定时间量内保护B_Key的机制。
+非零     1                0                提供保护且不允许其他BM读取节点中的B_Key。必须注意，如果租约期设为0（无限期）且设置它的BM死亡，则其他BM永远无法读取它。因此，如果B_Key未通过某种未指定的方式提供给其他BM，则此节点的BMA将永远不可再访问。
+
+
+16.3 设备管理
+
+设备管理代理（Device Management Agent）是可选的。
+
+C16-14.1.1: 设备管理器（DM）应通过SubnAdmSet(ServiceRecord)向SA注册其服务，使用ServiceName "DeviceManager.IBTA"。参见15.2.5.14"ServiceRecord"（第895页）和附录"应用程序特定标识符"中的服务名称。
+
+I/O设备和I/O控制器（IOC）不直接连接到IBA网络。I/O单元（IOU）包含一个或多个IOC，通过TCA连接到网络。TCA负责从网络接收数据包并将完整、有效的消息传递给IOC，反之亦然。TCA可能使用IOC提供的内存资源来组装数据包，并在完整数据包可供使用时通知IOC。然后IOC负责通过设备特定接口（如以太网或SCSI）执行I/O请求，如网络发送和接收或磁盘读写。
+
+本节不涉及终端设备（如磁盘驱动器）的直接管理，而是关注支持IOU/IOC管理的基础设施、相关方法、数据格式和属性。本节定义了在两个网络连接点（如HCA和TCA）之间发送和接收设备管理数据包的机制。
+
+IBA基于消息传递。对于IOU和IOC，消息分为三类：网络配置、单元管理/配置和I/O事务：
+
+• 由子网管理代理（SMA）处理的网络配置消息在第14章"子网管理"（第794页）中定义。
+• 通过通用服务接口（GSI）接收的特定于设备配置和管理的消息在本节中描述。
+• I/O事务消息不在本文档中定义。
+
+图203 I/O单元的架构模型
+[由TCA和一个或多个IOC组成的I/O单元]
+
+
+16.3.1 MAD格式
+
+o16-4: 设备管理类中的数据报应符合13.4"管理数据报"中规定的MAD格式，并按图204"设备管理MAD格式"（第987页）和表271"设备管理MAD字段"（第987页）进行定制。
+
+表271 设备管理MAD字段
+字段名称          长度      描述
+公共MAD头部      24字节    如13.4.2"管理数据报格式"（第718页）中描述
+保留              40字节    保留
+DevMgt数据        192字节   192字节的设备管理有效载荷。结构和内容取决于头部中的Method、Attribute和AttributeModifier字段。
+
+
+16.3.1.1 Status字段
+
+Status字段在13.4.7"Status字段"（第731页）中描述。定义了一些类特定位。
+
+表272 设备管理Status字段
+位      名称              含义
+0-7     -                如13.4.7"Status字段"中定义的公共位
+8       NoResponse       IOC未响应
+9       NoServiceEntries 不支持服务条目
+10-14   -                保留
+15      GeneralFailure   IOC一般故障
+
+
+16.3.2 方法
+
+TCA为发起客户端提供的服务之一是提供有关IOU支持的I/O资源（如IOC）详细信息的机制。此信息超越了支持的IOC简单计数，为每个IOC提供GUID、供应商唯一ID、产品修订级别和其他IOC特定信息。
+
+o16-4.1.1: 如果支持设备管理类，设备管理代理应支持表273"设备管理方法"中列出的方法。
+
+表273 设备管理方法
+方法              类型值   描述
+DevMgtGet()       0x01    请求IOU返回（读取）设备管理类属性
+DevMgtSet()       0x02    请求IOU设置（写入）属性
+DevMgtGetResp()   0x81    IOU对属性Get或Set请求的响应
+DevMgtTrap()      0x05    发送到设备管理实体的非请求数据报
+DevMgtTrapRepress() 0x07  阻止通知重复
+DevMgtReport()    0x06    转发先前订阅的事件
+DevMgtReportResp() 0x86   对DevMgtReport()方法的回复
+
+
+16.3.3 属性
+
+o16-4.1.2: 如果实现了设备管理类，设备管理代理应支持表274"设备管理属性"（第989页）和表275"设备管理属性/方法映射"（第991页）中列出的属性。
+
+表274 设备管理属性
+属性名称            属性ID        属性修改器(a)                描述
+ClassPortInfo       0x0001        0x0000_0000                参见16.3.3.1"ClassPortInfo"（第991页）
+Notice              0x0002        0x0000_0000                参见16.3.3.2"Notice"（第992页）
+IOUnitInfo          0x0010        0x0000_0000                给定IOU中所有IOC的列表。每个IOU最多支持0xFF个控制器。参见16.3.3.3"IOUnitInfo"（第992页）
+IOControllerProfile 0x0011        0x0000_0001-0x0000_00FF    IOC配置文件信息。AttributeModifier标识IOC。参见16.3.3.4"IOControllerProfile"（第993页）
+ServiceEntries      0x0012        0x0001_0000-0x00FF_FFFF    支持的服务及其关联Service ID的列表。参见16.3.3.5"ServiceEntries"（第995页）。每个IOC有一个最多255个ServiceEntries的表。AttributeModifier高16位标识IOC，低16位指定最多四个服务条目的范围。
+DiagnosticTimeout   0x0020        0x0000_0000-0xFFFF_FFFF    响应指示完成诊断测试的最长时间。以毫秒为倍数指定。参见16.3.3.6"DiagnosticTimeout"（第996页）
+PrepareToTest       0x0021        0x0000_0000-0xFFFF_FFFF    Set指示设备准备诊断测试。Get返回就绪状态。参见16.3.3.7"PrepareToTest"（第996页）
+TestDeviceOnce      0x0022        0x0000_0000-0xFFFF_FFFF    Set指示设备启动单次诊断测试。参见16.3.3.8"TestDeviceOnce"（第996页）
+TestDeviceLoop      0x0023        0x0000_0000-0xFFFF_FFFF    Set指示设备启动循环诊断测试。参见16.3.3.9"TestDeviceLoop"（第996页）
+DiagCode            0x0024        0x0000_0000-0xFFFF_FFFF    供应商特定的诊断信息。参见16.3.3.10"DiagCode"（第996页）
+供应商特定          0xFF00-0xFFFF  0x0000_0000-0xFFFF_FFFF    可定义供应商唯一属性值以传递特定测试指令
+a. 诊断属性的AttributeModifier指定I/O组件。
+
+表275 设备管理属性/方法映射
+属性名称            DevMgtGet()  DevMgtSet()  DevMgtTrap()
+ClassPortInfo       X            X
+Notice              X            X            X
+IOUnitInfo          X
+IOControllerProfile X
+ServiceEntries      X
+DiagnosticTimeout   X
+PrepareToTest       X            X
+TestDeviceOnce                   X
+TestDeviceLoop                   X
+DiagCode            X
+
+
+16.3.3.1 ClassPortInfo
+
+ClassPortInfo属性在13.4.8.1"ClassPortInfo"（第734页）中描述。未定义类特定位。
+
+表276 设备管理ClassPortInfo:CapabilityMask
+位      名称   含义
+0-7     -      如13.4.8.1"ClassPortInfo"（第734页）中定义的公共位
+8-15    -      类特定位为保留
+
+
+16.3.3.2 Notice
+
+Notice属性在13.4.8.2"Notice"（第737页）中描述。用于一个可选的通用陷阱。
+
+表277 设备管理陷阱
+名称          类型      编号   数据详情
+ReadyToTest   信息性    514    设备<DEVICE>的就绪状态为<STATUS>
+
+表278 Trap 514的Notice DataDetails
+字段      长度(位)   描述
+STATUS    16         就绪状态
+DEVICE    32         设备编号
+Padding   384        读取时应忽略。内容未指定。
+
+
+16.3.3.3 IOUnitInfo
+
+表279 IOUnitInfo
+组件              访问   长度(位)  偏移(位)  描述
+Change_ID         RO     16        0        ControllerList的任何更改时递增（可回绕）
+Max Controllers   RO     8         16       ControllerList中的槽位数
+Reserved          RO     6         24       保留
+DiagDeviceID      RO     1         30       零表示诊断属性中的AttributeModifier是I/O单元供应商特定的。一表示AttributeModifier的最低有效8位标识IOC槽位号。此位为一时，诊断按IOC执行。此位为零时，I/O单元供应商定义如何解释AttributeModifier。
+Option ROM        RO     1         31       表示Option ROM的存在。1 = 存在；0 = 不存在
+ControllerList    RO     1024      32       一系列4位半字节，每个代表IOU中的一个槽位。每个4位半字节取值：
+                                            • 0x0 = IOC未安装
+                                            • 0x1 = IOC存在
+                                            • 0x2-0xE = 保留
+                                            • 0xF = 槽位不存在
+                                            第一个字节（最低偏移）的位7-4代表槽位1，位3-0代表槽位2，依此类推。
+
+
+16.3.3.4 IOControllerProfile
+
+表280 IOControllerProfile
+组件                              访问   长度(位)  偏移(位)  描述
+GUID                              RO     64        0        用于唯一标识控制器的EUI-64 GUID
+VendorID                          RO     24        64       I/O控制器供应商ID，IEEE格式
+Reserved                          RO     8         88       保留
+IocDeviceID                       RO     32        96       供应商分配的用于标识控制器类型的编号
+Device Version                    RO     16        128      供应商分配的设备版本标识号
+Reserved                          RO     16        144      保留
+Subsystem VendorID                RO     24        160      封装了I/O控制器的机箱供应商ID（IEEE格式），否则为零
+Reserved                          RO     8         184      保留
+SubsystemID                       RO     32        192      标识控制器所在子系统的编号
+IOClass                           RO     16        224      0x0000-0xFFFE = 保留给IBA涵盖的I/O类；0xFFFF = 供应商特定
+IOSubclass                        RO     16        240      类似编码
+Protocol                          RO     16        256      0x0000-0xFFFE = 保留给IBA涵盖的I/O协议；0xFFFF = 供应商特定
+Protocol Version                  RO     16        272      协议特定
+Send Message Queue Depth          RO     16        320      发送消息队列的最大深度
+RDMA Read Queue Depth             RO     8         344      每通道RDMA读队列的最大深度
+Send Message Size                 RO     32        352      发送消息的最大大小（字节）
+RDMA Transfer Size                RO     32        384      IOC发起的出站RDMA传输最大大小（字节）
+Controller Operations CapabilityMask RO  8         416      此I/O控制器支持的操作类型。位设为1表示支持：
+                                                            位0: ST - 向IOC发送消息
+                                                            位1: SF - 从IOC发送消息
+                                                            位2: RT - 向IOC发送RDMA读请求
+                                                            位3: RF - 从IOC发送RDMA读请求
+                                                            位4: WT - 向IOC发送RDMA写请求
+                                                            位5: WF - 从IOC发送RDMA写请求
+                                                            位6: AT - 向IOC发送原子操作
+                                                            位7: AF - 从IOC发送原子操作
+Service Entries                   RO     8         432      ServiceEntries表中的条目数
+ID String                         RO     512       512      UTF-8编码的字符串，用于向操作员标识控制器
+
+每个IOC列出一个或多个ServiceEntries，每个ServiceEntry标识IOC提供的一个I/O服务实例。IOC可能有多个服务条目的原因包括：（1）当IOC支持多个协议时；（2）当IOC为其提供的每组I/O资源使用不同的QP时；（3）当IOC支持不同的服务标准时。
+
+
+16.3.3.5 ServiceEntries
+
+表281 ServiceEntries
+组件            访问   长度(位)  偏移(位)  描述
+ServiceName_1   RO     320       0        UTF-8编码、以null终止的服务名称
+ServiceID_1     RO     64        320      关联服务的标识符
+ServiceName_2   RO     320       384      UTF-8编码、以null终止的服务名称
+ServiceID_2     RO     64        704      关联服务的标识符
+ServiceName_3   RO     320       768      UTF-8编码、以null终止的服务名称
+ServiceID_3     RO     64        1088     关联服务的标识符
+ServiceName_4   RO     320       1152     UTF-8编码、以null终止的服务名称
+ServiceID_4     RO     64        1472     关联服务的标识符
+
+
+16.3.3.6 DiagnosticTimeout
+
+表282 DiagnosticTimeout
+组件              访问   长度(位)  偏移(位)  描述
+MaxDiagTime       RO     32        0        完成诊断操作的最长时间（毫秒）
+
+
+16.3.3.7 PrepareToTest
+
+表283 PrepareToTest — 此属性没有任何组件
+
+
+16.3.3.8 TestDeviceOnce
+
+表284 TestDeviceOnce — 此属性没有任何组件
+
+
+16.3.3.9 TestDeviceLoop
+
+表285 TestDeviceLoop — 此属性没有任何组件
+
+
+16.3.3.10 DiagCode
+
+表286 DiagCode
+组件        访问   长度(位)  偏移(位)  描述
+DiagCode    RO     16        0        16位诊断代码。值0x0000表示"设备正常运行"；所有其他值为IOU供应商特定。
+
+
+16.3.4 设备诊断
+
+设备诊断允许识别目标通道适配器后面设备中的故障。它补充了本规范中描述的如何识别和隔离网络和节点级别问题的其他部分。
+
+设备诊断框架旨在支持活跃网络内的测试。但它足够灵活，可以适应供应商独有的方法，包括检索上电数据。
+
+通常，设备诊断应谨慎使用，并充分了解对目标设备I/O事务的潜在影响。最好在初始配置、重大维护期间或作为最后手段使用。
+
+
+16.3.4.1 行为
+
+设备管理类的MAD用于诊断。使用标准方法和诊断特定属性来调用供应商提供的测试并确定已完成测试的结果。
+
+提供两种诊断启动模式：
+• 单次测试模式：通过为TestDeviceOnce属性设置适当的AttributeModifier（MSB=0）来启动。测试运行完成后，通过DiagCode属性获取结果。
+• 连续测试模式：通过为TestDeviceLoop属性设置适当的AttributeModifier（MSB=1）来启动。连续测试模式在收到DevMgtSet(TestDeviceLoop)（AttributeModifier MSB=0）时中止。收到DevMgtSet(TestDeviceOnce)（AttributeModifier MSB=0）时，在当前轮次完成后终止。
+
+
+16.4 SNMP隧道
+
+SNMP隧道代理（SNMP Tunneling Agent）是可选的。
+
+本节描述了用于在IBA上报告本机SNMP隧道的管理数据报。
+
+SNMP隧道是InfiniBand架构的一个支持选项，作为管理数据报服务。设备通过PortInfo属性中的IsSNMPSupported能力来宣传对SNMP隧道服务的支持。如果值非零，则可以通过GSI查询给定设备以获取访问SNMP服务的QP和LID。
+
+
+16.4.1 MAD格式
+
+o16-6: SNMP隧道类中的数据报应符合13.4"管理数据报"中规定的MAD格式，并按图205"SNMP隧道MAD格式"（第999页）和表287"SNMP隧道MAD字段"（第999页）进行定制。
+
+表287 SNMP隧道MAD字段
+字段名称        长度      描述
+公共MAD头部    24字节    如13.4.2"管理数据报格式"（第718页）中描述
+保留            32字节    保留
+Raddress        4字节     SNMP代理使用SNMP重定向功能转发SNMP数据包的不透明地址字段
+Payload Length  1字节     正在传输的SNMP段中有效数据字节数
+Segment Number  1字节     分段SNMP数据包的段号
+Source LID      2字节     SNMP数据包发送方的本地地址
+Data            192字节   属性数据
+
+
+16.4.1.1 Status字段
+
+Status字段在13.4.7"Status字段"中描述。未定义类特定位。
+
+表288 SNMP隧道Status字段
+位      名称   含义
+0-7     -      如13.4.7中定义的公共位
+8-15    -      保留（类特定位）
+
+
+16.4.2 方法
+
+o16-6.1.1: 如果支持SNMP隧道管理类，SNMP隧道代理应支持表289中列出的方法。
+
+表289 SNMP隧道方法
+方法              类型值   描述
+SnmpGet()         0x01    请求获取（读取）属性
+SnmpSet()         0x02    请求设置（写入）属性
+SnmpGetResp()     0x81    对Get()或Set()请求的响应
+SnmpSend()        0x03    向节点发送属性
+
+
+16.4.3 属性
+
+o16-6.1.2: 如果实现了SNMP隧道管理类，代理应支持表290和表291中列出的属性。
+
+表290 SNMP隧道属性
+属性名称        属性ID    属性修改器        描述
+ClassPortInfo   0x0001    0x0000_0000      参见16.4.3.1"ClassPortInfo"
+（无）          0x0010    任意             此属性的使用为供应商特定
+PduInfo         0x0011    0x0000_0001      第一个SNMP段
+                          0x0000_0002      中间SNMP段
+                          0x0000_0003      最后SNMP段
+                          0x0000_0004      第一个且最后一个SNMP段
+                          0x8000_0001      第一个重定向SNMP段
+                          0x8000_0002      中间重定向SNMP段
+                          0x8000_0003      最后重定向SNMP段
+                          0x8000_0004      第一个且最后一个重定向SNMP段
+
+表291 SNMP隧道属性/方法映射
+属性名称        SnmpGet()  SnmpSet()  SnmpSend()
+ClassPortInfo   X
+CommunityInfo              X
+PduInfo                               X
+
+
+16.4.3.1 ClassPortInfo
+
+ClassPortInfo属性在13.4.8.1"ClassPortInfo"（第734页）中描述。未定义类特定位。
+
+
+16.4.3.3 PduInfo
+
+表293 PduInfo
+组件       可设置性   长度(位)  偏移(位)  描述
+PduData    RO         1536      0        SNMP消息的数据段
+
+
+16.4.4 操作
+
+一个数据包由一个或多个段组成。如有必要，数据包将在源端分段、传输并在目标端重新组装。
+
+o16-7: 当SNMP数据包需要分段为多个MAD时，除最后一个MAD外，所有传输的MAD的数据字段应被完全填满（192字节数据）。
+
+o16-8: 如果多MAD传输中的任何段未在13.4.6.3"超时/定时器使用"（第730页）中指定的超时时间内收到，则应丢弃整个MAD。
+
+o16-9: SNMP数据包所有MAD的Transaction ID字段应相同，并应符合13.4.6.4"TransactionID使用"（第731页）中描述的Transaction ID唯一性。
+
+SNMP管理类可以传输最多49,152字节的数据包。这足以容纳任何传入的SNMP/UDP数据包。
+
+
+16.4.4.1 超出InfiniBand端节点的SNMP目标
+
+要定向到不直接连接到InfiniBand网络的远程受管对象，需要使用SNMP代理（Proxy Agent）。代理的基本功能是接收从InfiniBand端节点SNMP代理传递的SNMP数据包，并将其转发到远程受管代理。
+
+SNMP重定向用于超出InfiniBand端节点的目标定向。
+
+
+16.4.4.2 陷阱事件订阅
+
+节点可以通过适当设置ClassPortInfo属性中的LID和QP来请求从给定节点接收SNMP陷阱。
+
+
+16.5 供应商特定
+
+供应商特定代理（Vendor-specific Agent）是可选的。
+
+供应商特定操作可以使用供应商特定管理类来定义。供应商可以自由定义新方法和属性及其使用，前提是它们符合本文中定义的通用MAD格式和方法，并且不与方法和属性使用的既定限制冲突。
+
+
+16.5.1 MAD格式
+
+o16-12.1.1: 对于供应商特定类0x09-0x0F，数据报应符合MAD格式，并按图209"供应商MAD格式（类0x09-0x0F）"（第1005页）进行定制。
+
+表294 供应商MAD字段（类0x09-0x0F）
+字段名称          长度      描述
+公共MAD头部      24字节    如13.4.2中描述
+Data              232字节   数据的解释为供应商类特定
+
+o16-12.1.2: 对于供应商特定类0x30-0x4F，数据报应符合MAD格式，并按图210"供应商MAD格式（类0x30-0x4F）"（第1006页）进行定制。
+
+表295 供应商MAD字段（类0x30-0x4F）
+字段名称          长度      描述
+公共MAD头部      24字节    如13.4.2中描述
+RMPP头部          12字节    如13.6.2.1"RMPP头部"（第772页）中描述
+保留              1字节     保留
+OUI               3字节     IEEE分配的供应商OUI
+Data              228字节   数据的解释为供应商类特定
+
+
+16.5.2 Status字段
+
+Status字段在13.4.7"Status字段"中描述。类特定位由供应商定义。
+
+
+16.5.3 方法
+
+供应商类支持公共方法。供应商特定方法可由供应商按需添加，前提是不与13.4.5"管理类方法"中的保留方法冲突。
+
+表297 供应商类方法
+方法                类型值   描述
+VendorGet()         0x01    请求从目标返回（读取）属性
+VendorSet()         0x02    请求目标设置（写入）属性
+VendorGetResp()     0x81    目标对Get()/Set()请求的响应
+VendorSend()        0x03    发送数据报，不需要响应
+VendorTrap()        0x05    发送到供应商实体的非请求数据报
+VendorTrapRepress() 0x07    阻止通知重复
+
+
+16.5.4 属性
+
+供应商类可选择性地支持Notice和InformInfo属性。所有其他属性由供应商定义。
+
+表298 供应商类属性
+属性名称        属性ID         属性修改器                 描述
+ClassPortInfo   0x0001         0x00000000                参见16.5.4.1"ClassPortInfo"
+供应商定义      0x0010-0xFFFF  0x00000000-0xFFFFFFFF
+
+
+16.5.4.1 ClassPortInfo
+
+ClassPortInfo属性在13.4.8.1中描述。类特定位由供应商定义。
+
+
+16.6 应用程序特定
+
+应用程序特定代理（Application-specific Agents）是可选的。
+
+应用程序特定操作可以使用应用程序特定管理类来定义。应用程序可以自由定义新方法和属性及其使用，前提是它们符合本文中定义的通用MAD格式和方法。应用程序特定类可用于定义IBA涵盖的应用程序管理操作。供应商不应使用应用程序特定类来定义供应商特定行为；应改用供应商特定管理类。
+
+
+16.6.1 MAD格式
+
+o16-14: 应用程序特定类中的数据报应符合MAD格式，并按图211"应用程序MAD格式"进行定制。
+
+表301 应用程序MAD字段
+字段名称          长度      描述
+公共MAD头部      24字节    如13.4.2中描述
+Data              232字节   数据的解释为应用程序类特定
+
+
+16.6.1.1 Status字段
+
+Status字段在13.4.7中描述。类特定位由应用程序定义。
+
+
+16.6.2 方法
+
+应用程序类支持公共方法。应用程序特定方法可由应用程序按需添加。
+
+表303 应用程序类方法
+方法              类型值   描述
+AppGet()          0x01    请求从目标返回（读取）属性
+AppSet()          0x02    请求目标设置（写入）属性
+AppGetResp()      0x81    目标对Get()/Set()请求的响应
+AppSend()         0x03    发送数据报，不需要响应
+AppTrap()         0x05    发送到应用程序实体的非请求数据报
+AppTrapRepress()  0x07    阻止通知重复
+
+
+16.6.3 属性
+
+应用程序类可选择性地支持Notice和InformInfo属性。所有其他属性由应用程序定义。
+
+表304 应用程序类属性
+属性名称        属性ID         属性修改器                 描述
+ClassPortInfo   0x0001         0x00000000                参见16.6.3.1"ClassPortInfo"
+应用程序定义    0x0011-0xFFFF  0x00000000-0xFFFFFFFF
+
+
+16.6.3.1 ClassPortInfo
+
+ClassPortInfo属性在13.4.8.1中描述。类特定位由应用程序定义。
+
+表306 应用程序ClassPortInfo:CapabilityMask
+位      名称   含义
+0-7     -      如13.4.8.1中定义的公共位
+8-15    -      类特定位由应用程序定义
+
+
+16.7 通信管理
+
+C16-14: 此合规声明已过时并已删除。
+
+通信管理在第12章"通信管理"（第650页）中描述。节点所需的通信管理功能在该章中描述。本节中定义的消息的正确使用受该章中定义的协议和状态机约束。
+
+
+16.7.1 MAD格式
+
+C16-15: 通信管理类中的数据报应符合13.4"管理数据报"中规定的MAD格式，并按图212"通信管理MAD格式"（第1011页）和表307"通信管理MAD字段"（第1011页）进行定制。
+
+C16-15.1.1: CM类的MADHeader:ClassVersion组件在本规范版本中应为2。
+
+表307 通信管理MAD字段
+字段名称          长度      描述
+公共MAD头部      24字节    如13.4.2中描述
+Data              232字节   属性数据从以下各节描述的格式逐位映射到此数据字段
+
+
+16.7.1.1 Status字段
+
+Status字段在13.4.7中描述。未定义类特定位。
+
+表308 通信管理Status字段
+位      名称   含义
+0-7     -      如13.4.7中定义的公共位
+8-15    -      保留（类特定位）
+
+
+16.7.2 方法
+
+C16-15.1.2: 通信管理类应支持表309中列出的方法。
+
+表309 通信管理方法
+方法              类型值   描述
+ComMgtGet()       0x01    请求获取（读取）属性
+ComMgtSet()       0x02    请求设置（写入）属性
+ComMgtGetResp()   0x81    对Get()或Set()请求的响应
+ComMgtSend()      0x03    发送连接管理消息
+
+
+16.7.3 属性
+
+C16-15.1.3: 通信管理器应支持表310和表311中列出的属性和方法。
+
+表310 通信管理属性
+属性名称              属性ID    属性修改器     描述
+ClassPortInfo         0x0001    0x00000000    参见13.4.8.1"ClassPortInfo"（第734页）
+ConnectRequest        0x0010    0x00000000    参见12.6.5 REQ（第659页）
+MsgRcptAck            0x0011    0x00000000    参见12.6.6 MRA（第661页）
+ConnectReject         0x0012    0x00000000    参见12.6.7 REJ（第662页）
+ConnectReply          0x0013    0x00000000    参见12.6.8 REP（第668页）
+ReadyToUse            0x0014    0x00000000    参见12.6.9 RTU（第669页）
+DisconnectRequest     0x0015    0x00000000    参见12.6.10 DREQ（第669页）
+DisconnectReply       0x0016    0x00000000    参见12.6.11 DREP（第670页）
+ServiceIDResReq       0x0017    0x00000000    参见12.11.1 SIDR_REQ（第706页）
+ServiceIDResReqResp   0x0018    0x00000000    参见12.11.2 SIDR_REP（第707页）
+LoadAlternatePath     0x0019    0x00000000    参见12.8.1 LAP（第681页）
+AlternatePathResponse 0x001A    0x00000000    参见12.8.2 APR（第682页）
+
+表311 通信管理属性/方法映射
+属性                  ComMgtGet()  ComMgtSet()  ComMgtSend()
+ClassPortInfo         X
+ConnectRequest                                  X
+ConnectReply                                    X
+ReadyToUse                                      X
+MsgRcptAck                                      X
+ConnectReject                                   X
+DisconnectRequest                               X
+DisconnectReply                                 X
+LoadAlternatePath                               X
+AlternatePathResponse                           X
+ServiceIDResReq                                 X
+ServiceIDResReqResp                             X
+
+属性组件的规范定义和适用的操作要求和约束在第12章"通信管理"（第650页）中定义。
+
+
+16.7.3.1 ClassPortInfo
+
+ClassPortInfo属性在13.4.8.1"ClassPortInfo"（第734页）中描述。此外，CapabilityMask组件的第8到12位被定义：
+
+表312 通信管理ClassPortInfo:CapabilityMask
+位      名称                          含义
+0-7     -                            如13.4.8.1"ClassPortInfo"（第734页）中定义的公共位
+8       保留                          保留
+9       IsReliableConnectionCapable   与此端口关联的CM支持可靠连接队列对之间的连接建立和释放。它将接受并响应12.6.1"必需消息"（第655页）中定义的所有强制消息。
+10      IsReliableDatagramCapable     与此端口关联的CM支持EE上下文之间可靠数据报通道的建立和释放。它将接受并响应所有强制消息。
+11      Undefined                     未定义；此字段的任何使用取决于供应商。
+12      IsUnreliableConnectionCapable  与此端口关联的CM支持不可靠连接队列对之间的连接建立和释放。它将接受并响应所有强制消息。
+13      IsSIDRCapable                 与此端口关联的CM将响应传入的Service ID解析请求，如12.11"Service ID解析协议"（第705页）中定义。
+14-15   保留                          保留

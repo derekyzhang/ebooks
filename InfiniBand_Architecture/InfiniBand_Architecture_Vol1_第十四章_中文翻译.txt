@@ -1,0 +1,1480 @@
+================================================================================
+InfiniBand 架构规范 卷1 发行版1.2
+第十四章：子网管理
+中文翻译
+================================================================================
+
+第十四章：子网管理
+
+14.1 子网管理模型
+
+每个子网至少有一个子网管理器（SM）。每个SM驻留在CA、路由器或交换机的端口上，可以用硬件或软件实现。当子网上有多个SM时，一个SM将是主SM。其余SM必须是备用SM。每个端口只有一个SM。
+
+主SM是初始化和配置IB子网的关键元素。主SM作为子网初始化过程的一部分被选举出来，负责：
+• 发现子网的物理拓扑
+• 为端节点、交换机和路由器分配本地标识符（LID）
+• 在端节点之间建立可能的路径
+• 扫描子网，发现拓扑变化，并在添加和删除节点时管理变更。
+
+主SM与SMA之间的通信，以及SM之间的通信，通过子网管理数据包（SMP）执行。SMP提供了子网管理的基本机制。
+
+SMP有两种类型：LID路由和定向路由。LID路由SMP通过子网（由交换机）基于目的地的LID进行转发。定向路由SMP基于定义子网路径的端口号向量进行转发。定向路由SMP用于实现多种管理功能，特别是在LID分配给节点之前。SMP在14.2节"子网管理类"（第794页）中规定。
+
+每个交换机、CA和路由器都有一个子网管理代理（SMA），由主SM管理。SMA在14.3节"子网管理代理"（第852页）中规定。
+
+主SM和备用SM的操作细节在14.4节"子网管理器"（第859页）中描述。
+
+14.2 子网管理类
+
+本节定义了MAD的子网管理类。这些MAD也称为子网管理数据包或SMP。该类的目的是提供子网内节点的子网配置、监控和查询。SMP在子网上的SM和SMA之间交换，如表122"SM MAD源和目的地"（第756页）所述。
+
+有两个专用于子网管理的管理类。
+
+C14-1: 子网管理类应由MADHeader:MgmtClass值0x01（LID路由类）和0x81（定向路由类）标识，如表113"管理类值"（第720页）中所列。
+
+本节将描述子网管理类的类特定方法、属性、标准头部字段和协议。
+
+14.2.1 数据报格式和使用
+
+C14-2: 该类中的数据报应符合MAD格式和使用规则，如13.4.2节"管理数据报格式"（第718页）中所规定。
+
+14.2.1.1 SMP数据格式 - LID路由
+
+LID路由SMP使用在子网初始化期间设置的正常交换机转发表在子网中路由。
+
+C14-3: LID路由SMP应具有图183（第795页）和表125（第796页）中所示的格式。
+
+  字节    位31-24      位23-16      位15-8       位7-0
+  0       通用MAD头部
+  ...
+  20-24   M_Key
+  28-32   保留（32字节）
+  ...
+  60-64   SMP数据（64字节）
+  128     保留（128字节）
+  252
+
+图183 SMP格式（LID路由）
+
+表125 SMP字段（LID路由）
+对象              长度        描述
+通用MAD头部       24字节      通用MAD，如13.4.2节"管理数据报格式"（第718页）所述。
+M_Key             8字节       64位密钥，用于SM认证。使用方法在14.2.4节"管理密钥"（第806页）中定义。
+保留              32字节      用于将SMP数据字段与定向路由SMP数据字段对齐。
+SMP数据           64字节      64字节的SMP数据字段，用于包含方法的属性。
+保留              128字节     保留。
+
+14.2.1.2 SMP数据格式 - 定向路由
+
+定向路由SMP使用相邻节点之间的存储转发技术在子网中从SMA到SMA路由。因此它们不依赖于路由表条目。定向路由SMP主要用于在子网初始化之前发现子网的物理连接性。
+
+C14-4: 定向路由SMP应具有图184"SMP格式（定向路由）"（第796页）和表126"SMP字段（定向路由）"（第797页）中所示的格式。
+
+  字节    位31-24      位23-16      位15-8       位7-0
+  0       通用MAD头部1
+  4       D           状态        跳指针       跳计数
+  ...     通用MAD头部2
+  20-24   M_Key
+  28-32   DrSLID                  DrDLID
+  36      保留（28字节）
+  ...
+  60
+  64      SMP数据（64字节）
+  128     初始路径（64字节）
+  192     返回路径（64字节）
+  ...
+  252
+
+图184 SMP格式（定向路由）
+
+表126 SMP字段（定向路由）
+对象              长度        描述
+通用MAD头部       14字节      通用MAD的字节0-3，如13.4.2节"管理数据报格式"（第718页）所述。
+D                 1位         通常是类特定状态字段的一部分，此方向位被定向路由用于确定数据包的方向。
+                              如果为0，方向为出站，从SM到节点。
+                              如果为1，方向为入站，从节点到SM。
+状态              15位        指示方法状态的代码，如13.4.7节"状态字段"（第731页）所定义。没有SMP状态位（位14-8必须为零）。
+跳指针            1字节       跳指针用于指示初始/返回路径字段的当前字节。
+跳计数            1字节       跳计数用于包含初始/返回路径中的有效字节数。它指示要进行多少个定向路由"跳"。
+通用MAD头部2      16字节      通用MAD的字节8-23，如13.4.2节"管理数据报格式"（第718页）所述。
+M_Key             8字节       64位密钥，用于SM认证。使用方法在14.2.4节"管理密钥"（第806页）中定义。
+DrSLID            2字节       定向路由源LID。用于定向路由。
+DrDLID            2字节       定向路由目的LID。用于定向路由。
+保留              28字节      用于将数据字段对齐到64字节边界。
+数据              64字节      64字节的SMP数据字段，用于包含方法的属性。
+初始路径          64字节      64字节字段，包含初始定向路径。该字段中的每个字节代表一个端口。
+返回路径          64字节      64字节字段，包含返回定向路径。该字段中的每个字节代表一个端口。
+
+14.2.2 SMP和定向路由算法
+
+定向路由SMP提供了一种在已配置、未配置或部分配置的子网中转发管理数据包的机制。此机制可用于发现子网中的节点、执行诊断或验证链路连通性，绕过正常的交换机LID转发机制。
+
+有两个组件支持子网中的此机制：宽容目的地址和定向路由。宽容目的地址在4.1节"术语和概念"（第142页）中定义。当节点（包括交换机）收到具有此地址的数据包时，它会将其转发到其子网管理接口。定向路由允许定义基于介入交换机端口号的显式路由，数据包将在子网中遍历该路由。
+
+一般来说，定向路由的进展比正常交换慢得多。这是因为沿路由的每个交换机都必须对每个定向路由数据包执行一些处理。此外，IBA允许节点为SMP的处理保留最少量的缓冲。因此，如果注入速率超过子网和端节点的缓冲和处理能力，SMP可能在子网中被丢弃。因此，建议仅在必要时使用定向路由。
+
+定向路由算法提供了一种在定向路由两侧使用正常LID路由的方法。不支持多个定向路由。不可能指定两个或更多定向路由并在它们之间插入LID路由。这在图185"使用定向路由的完整路由"（第799页）中说明。两个节点之间的完整路由由三部分组成，每部分都可能为空：
+
+• 从源节点到源交换机。这部分使用LID路由，源节点和源交换机通过其LID标识。它们之间可能有其他交换机，但子网的这部分已配置为允许LID路由。
+• 从源交换机到目的交换机。这部分使用直接路由。路由通过声明数据包必须使用的端口号来离开交换机来指定。子网的这部分不需要已配置为允许LID路由。
+• 从目的交换机到目的节点。这部分使用LID路由，目的节点和目的交换机通过其LID标识。它们之间可能有其他交换机，但子网的这部分已配置为允许LID路由。
+
+由于每部分可能为空，所以有八种组合，尽管只有四种是真正有用的：
+
+• 所有三部分都为空；这指的是HopCount=0、DrSLID=0xFFFF和DrDLID=0xFFFF的情况。这用于在分配LID之前回环到自身。见图186"使用定向路由的回环"（第799页）。
+• 两个LID路由部分都为空。这是在子网未配置LID路由的部分中使用的纯定向路由。见图187"纯定向路由"（第799页）。
+• 一个LID路由部分为空。这在子网的一部分（源端或目的端）已配置LID路由时使用。见图188"带源端LID路由部分的定向路由"（第800页）和图189"带目的端LID路由部分的定向路由"（第800页）。
+• 没有部分为空。这是图185"使用定向路由的完整路由"（第799页）中说明的一般情况，此时子网在源端和目的端的部分已初始化，但中间部分未初始化。
+
+以下部分描述了如何初始化定向路由数据包、如何初始化返回数据包，以及交换机沿路由转发数据包所使用的算法。请注意，在路由的交换部分，节点不直接参与；数据包像任何其他数据包一样沿路径交换。
+
+图185 使用定向路由的完整路由
+图186 使用定向路由的回环
+图187 纯定向路由
+图188 带源端LID路由部分的定向路由
+图189 带目的端LID路由部分的定向路由
+
+14.2.2.1 出站定向路由SMP初始化
+
+C14-5: 只有SM才能发起定向路由SMP。
+
+C14-5.a1: SM应确保LID路由段上的所有节点都已正确初始化用于LID路由。
+
+在以下各节中，SM发起者所在的源节点称为请求者节点，目的节点称为响应者节点，即使在描述返回过程时也是如此。当使用定向路由时，它仅指定向路由部分，而非完整路由。
+
+C14-6: 定向路由SMP的字段应按如下方式初始化：
+• Mgmt Class应设置为表113"管理类值"（第720页）中指定的定向路由子网管理类。
+• Method应设置为表114"通用管理方法"（第722页）中指定的SubnGet()或SubnSet()。
+• D位应设置为0。
+• 跳指针应设置为0。
+• 跳计数应设置为沿定向路由路径部分遍历的链路数。有效值为0到63。在图185"使用定向路由的完整路由"（第799页）中，此数字为3。在图186"使用定向路由的回环"（第799页）中，此数字为0。
+• 如果定向路由部分从请求者节点开始，即源端没有LID路由部分（如图186"使用定向路由的回环"、图187"纯定向路由"或图189"带目的端LID路由部分的定向路由"所示），则DrSLID应设置为宽容LID。如果定向路由不从请求者节点开始，则DrSLID应设置为请求者节点的LID（该LID必须已被分配）。
+• 如果定向路由在响应者节点结束，即目的端没有LID路由部分（如图186"使用定向路由的回环"、图187"纯定向路由"或图188"带源端LID路由部分的定向路由"所示），则DrDLID应设置为宽容LID。如果定向路由不在响应者节点结束，则DrDLID应设置为响应者节点的LID（该LID必须已被分配）。
+• 初始路径应设置为跳计数个端口号的数组，对应于跳的起始端端口，具体来说，是SMP将开始沿定向路由在节点间链路上传输的端口。该数组应在初始路径字段中布局，使得该字段偏移0处的字节为保留，后续字节按顺序填充端口号。
+• 返回路径应设置为跳计数个零的数组。该数组应在返回路径字段中布局，使得该字段偏移0处的字节为保留，后续字节填充零。
+• 所有其他字段应与LID路由SMP的设置方式相同。
+
+C14-7: 封装定向路由SMP的不可靠数据报的数据包头部应按如下方式初始化：
+• 如果定向路由部分从请求者节点开始，LRH:SLID应设置为宽容LID或此端口的LID。如果定向路由不从请求者节点开始，LRH:SLID应设置为请求者节点的LID（该LID必须已被分配）。
+• 如果定向路由部分从请求者节点开始，LRH:DLID应设置为宽容LID。否则，应设置为定向路由部分中源交换机的LID。该LID必须已被分配，且该交换机和请求者节点之间的路由必须已初始化。
+• 所有其他字段应与LID路由SMP的设置方式相同。
+
+SM随后将数据包交给SMI。如果定向路由部分从请求者节点开始，SMI按14.2.2.2节"出站定向路由SMP由SMI处理"（第802页）所述处理数据包。否则，SMI将像处理任何LID路由数据包一样输出该数据包。
+
+14.2.2.2 出站定向路由SMP由SMI处理
+
+C14-8: 到达SMI且MADHeader:MgmtClass设置为0x81（定向路由类）的任何SMP应由SMI处理。
+
+C14-9: SMI应按以下互斥情况之一处理出站定向路由SMP（D位为0）：
+
+1) 如果跳计数非零且跳指针为零，则SMI位于路径的定向路由部分的起点。SMI应按如下方式修改定向路由SMP的内容：
+   • 跳指针应加1。
+   • 对于交换机，LRH:SLID应设置为宽容LID。对于CA，LRH:SLID应设置为此端口的LID或宽容LID。
+   • LRH:DLID应设置为宽容LID。
+   SMI应在初始路径中由跳指针索引的条目中的端口号所指示的端口上输出数据包。如果该端口号无效，SMI应丢弃该SMP。
+
+2) 如果跳计数非零且跳指针在范围1 ≤ 跳指针 < 跳计数内，则此SMI是路径的定向路由部分中的中间跳。如果节点不是交换机，SMI应丢弃该SMP，否则SMI应按如下方式修改定向路由SMP的内容：
+   • 返回路径端口号数组中由跳指针索引的条目应设置为接收SMP的端口号，然后跳指针应加1。
+   • LRH:SLID应设置为宽容LID。
+   • LRH:DLID应设置为宽容LID。
+   SMI应在初始路径中由跳指针索引的条目中的端口号所指示的端口上输出数据包。如果该端口号无效，SMI应丢弃该SMP。
+
+3) 如果跳指针等于跳计数，则SMI位于路径的定向路由部分的终点。SMI应按如下方式修改定向路由SMP的内容：
+   • 如果跳计数为零，跳指针应加1。否则，返回路径端口号数组中由跳指针索引的条目应设置为接收SMP的端口号，然后跳指针应加1。
+   • 对于交换机，出站定向路由SMP的LRH:SLID应按如下方式修改：如果DrDLID是宽容LID，LRH:SLID应设置为宽容LID。如果DrDLID不是宽容LID，LRH:SLID应设置为此节点的基本LID。对于CA，如果DrDLID是宽容LID，LRH:SLID可设置为宽容LID；否则，SMP将被静默丢弃。
+   • LRH:DLID应设置为DrDLID。
+   如果LRH:DLID是宽容LID，则此节点是响应者节点，SMI应将数据包交给SMA或SM，它们可以检查跳指针是否等于HopCount+1。
+   如果LRH:DLID不是宽容LID，SMI将像处理任何LID路由数据包一样输出该数据包。
+
+4) 如果跳指针等于跳计数+1，则此节点是响应者节点，SMI应将数据包交给SMA或SM，它们可以检查跳指针是否等于跳计数+1。
+
+5) 如果跳指针在范围(跳计数+1) < 跳指针 ≤ 255内，SMI应静默丢弃该SMP。
+
+返回定向路由SMP（D位为1）的处理在14.2.2.3节"返回定向路由SMP初始化"（第803页）中描述。
+
+14.2.2.3 返回定向路由SMP初始化
+
+接收定向路由SMP的SMA或SM像处理LID路由SMP一样处理它（关于方法和属性的处理）。接收方SMA或SM可能确定应发送响应。
+
+C14-10: 定向路由响应SMP的字段应按如下方式初始化：
+• Method应设置为表114"通用管理方法"（第722页）中指定的SubnGetResp()。
+• D位应设置为1。
+• Mgmt Class、跳指针、跳计数、DrSLID、DrDLID、初始路径和返回路径应从请求SMP原样复制。
+• 所有其他字段应按LID路由SMP的方式设置。
+
+C14-11: 封装定向路由响应SMP的不可靠数据报的数据包头部也应按如下方式初始化：
+• 如果定向路由部分从响应者节点开始，LRH:SLID应设置为宽容LID或此端口的LID。如果定向路由不从响应者节点开始，LRH:SLID应设置为响应者节点的LID（该LID必须已被分配）。
+• LRH:DLID应设置为定向路由请求SMP的LRH:SLID。
+• 所有其他字段应按LID路由SMP的方式设置。
+
+SMA或SM随后将数据包交给SMI。如果定向路由部分从响应者节点开始，SMI按14.2.2.4节"返回定向路由SMP由SMI处理"（第804页）所述处理数据包。否则，SMI将像处理任何LID路由数据包一样输出该数据包。
+
+14.2.2.4 返回定向路由SMP由SMI处理
+
+C14-12: 此合规声明已过时并被移除。
+
+C14-13: SMI应按以下互斥情况之一处理返回定向路由SMP（D位为1）：
+
+1) 如果跳计数非零且跳指针等于跳计数+1，则SMI位于路径的定向路由部分的起点。SMI应按如下方式修改定向路由SMP的内容：
+   • 跳指针应减1。
+   • 对于交换机，LRH:SLID应设置为宽容LID。对于CA，LRH:SLID应设置为此端口的LID或宽容LID。
+   • LRH:DLID应设置为宽容LID。
+   SMI应在返回路径中由跳指针索引的条目中的端口号所指示的端口上输出数据包。如果该端口号无效，SMI应丢弃该SMP。
+
+2) 如果跳计数非零且跳指针在范围2 ≤ 跳指针 ≤ 跳计数内，则此SMI是路径的定向路由部分中的中间跳。如果节点不是交换机，SMI应丢弃该SMP，否则SMI应按如下方式修改定向路由SMP的内容：
+   • 跳指针应减1。
+   • LRH:SLID应设置为宽容LID。
+   • LRH:DLID应设置为宽容LID。
+   SMI应在返回路径中由跳指针索引的条目中的端口号所指示的端口上输出数据包。如果该端口号无效，SMI应丢弃该SMP。
+
+3) 如果跳指针等于1，则SMI位于路径的定向路由部分的终点。SMI应按如下方式修改定向路由SMP的字段：
+   • 跳指针应减1。
+   • 对于交换机，返回定向路由SMP的LRH:SLID应按如下方式修改：如果DrSLID是宽容LID，LRH:SLID应设置为宽容LID。如果DrSLID不是宽容LID，LRH:SLID应设置为此节点的LID。对于CA，如果DrSLID是宽容LID，LRH:SLID可设置为宽容LID；否则，SMP应被静默丢弃。
+   • LRH:DLID应设置为DrSLID。
+   如果LRH:DLID是宽容LID，则此节点是请求者节点，SMI必须将数据包交给SM，SM可以检查HopPointer是否等于0。
+   如果LRH:DLID不是宽容LID，SMI将像处理任何LID路由数据包一样输出该数据包。
+
+4) 如果跳指针等于0，则此节点是请求者节点，SMI必须将数据包交给SM，SM可以检查跳指针是否等于0。
+
+5) 如果跳指针在范围(跳计数+2) ≤ 跳指针 ≤ 255内，则SMI应静默丢弃该SMP。
+
+出站定向路由SMP（D位为0）的处理在14.2.2.2节"出站定向路由SMP由SMI处理"（第802页）中描述。
+
+14.2.3 方法
+
+子网管理类使用13.4.5节"管理类方法"（第721页）中描述的通用方法的子集。
+
+C14-13.1.1: 子网管理实体应支持表127"子网管理方法"（第806页）中列出的方法。表中未列出的所有方法类型值均为保留值。
+
+表122"SM MAD源和目的地"（第756页）指示哪些方法适用于来源于SM的SMP、来源于SMA的SMP，以及可能发往SMA或SM的SMP。
+
+C14-14: 此合规声明已过时并被移除。
+
+子网管理实体（SMA和SM）支持表127"子网管理方法"（第806页）中列出的方法。
+
+表127 子网管理方法
+方法              类型值      描述
+SubnGet()         0x01       请求获取（读取）属性。
+SubnSet()         0x02       请求设置（写入）属性。
+SubnGetResp()     0x81       对get或set请求的响应。
+SubnTrap()        0x05       通知发生了事件。
+SubnTrapRepress() 0x07       停止发送重复的Trap。
+
+14.2.4 管理密钥
+
+SMP用于初始化和配置CA、交换机和路由器，因此被视为特权操作。因此，提供了一种机制来授权基于以下内容的子网管理操作：
+
+• 存储在LID路由和定向路由子网管理类数据报的MADHeader:M_Key中的密钥，分别如图183"SMP格式（LID路由）"（第795页）和图184"SMP格式（定向路由）"（第796页）所示。
+• 在每个端口的PortInfo属性的PortInfo:M_Key组件中本地保存的密钥，该属性在表145"PortInfo"（第822页）中描述。
+
+认证由目的端口的管理实体执行，通过比较SMP中包含的密钥与目的端口驻留的密钥来实现。此密钥称为管理密钥（M_Key）。
+
+C14-15: 当接收端口的PortInfo:M_Key设置为零时，不应检查SMP的MADHeader:M_Key中包含的M_Key。因此，不执行认证。
+
+如果PortInfo:M_Key非零，接收端口的认证和对端口属性的访问由PortInfo:M_KeyProtectBits的内容确定，如14.2.4.1节"保护级别"（第807页）所述。最后，M_Key可能会丢失，因此PortInfo:M_KeyLeasePeriod组件提供了密钥恢复机制，在14.2.4.2节"租约期"（第807页）中描述。
+
+请注意，PortInfo的M_Key组件对于交换机物理端口未定义。交换机物理端口属性的M_Key检查使用交换机端口0的PortInfo:M_Key执行。
+
+14.2.4.1 保护级别
+
+C14-16: 如果PortInfo:M_Key非零，驻留在端口的管理实体应执行由PortInfo:M_KeyProtectBits内容和表128"保护级别"（第807页）中描述的行为确定的认证。
+
+表128 保护级别
+PortInfo:M_KeyProtectBits    描述
+0    SubnGet(*)对MADHeader:M_Key中的任何密钥都应成功，SubnGetResp(PortInfo)应返回PortInfo:M_Key组件的内容。
+     如果MADHeader:M_Key与端口中的PortInfo:M_Key组件不匹配，SubnSet(*)和SubnTrapRepress(*)应失败。
+1    SubnGet(*)对MADHeader:M_Key中的任何密钥都应成功，如果MADHeader:M_Key与端口中的PortInfo:M_Key组件不匹配，SubnGetResp(PortInfo)应返回PortInfo:M_Key组件内容设置为零。
+     如果MADHeader:M_Key与端口中的PortInfo:M_Key组件不匹配，SubnSet(*)和SubnTrapRepress(*)应失败。
+2    如果MADHeader:M_Key与端口中的PortInfo:M_Key组件不匹配，SubnGet(*)、SubnSet(*)和SubnTrapRepress(*)应失败。
+3    如果MADHeader:M_Key与端口中的PortInfo:M_Key组件不匹配，SubnGet(*)、SubnSet(*)和SubnTrapRepress(*)应失败。此功能与PortInfo:M_KeyProtectBits = 2的功能相同。保留仅为向后兼容。
+
+14.2.4.2 租约期
+
+租约期通过设置PortInfo:M_KeyLeasePeriod组件的内容来指定。其目的是允许M_Key在主SM意外离开而未与备用SM共享M_Key且没有其他带外恢复机制可用时"过期"。
+
+C14-17: 当端口接收到一个SMP，其M_Key检查按照表128"保护级别"（第807页）执行并失败时，租约期计时器应开始向零倒计时。如果租约计时器倒计时已在进行中，则不应因该SMP的到达而中断。
+
+C14-18: 当端口接收到一个SMP，其M_Key检查按照表128"保护级别"（第807页）执行并失败时，该端口的PortInfo:M_KeyViolations组件应递增。当该组件达到全1时，递增应停止。
+
+此外，必须生成一个M_Key违规陷阱/通知，如14.3.9节"M_Key不匹配"（第857页）所述，指示租约计时器已开始计数。作为对该陷阱的响应，主SM可以刷新租约期。如果最初设置M_Key的主SM已离开，租约期可能会过期。
+
+C14-19: 当任何SMP被接收且其MADHeader:M_Key与PortInfo:M_Key匹配时，租约期计数器应停止倒计时并重置为PortInfo:M_KeyLeasePeriod组件中包含的值。
+
+C14-20: 当租约期计数器从非零转变为零时，PortInfo:M_KeyProtectBits应设置为零。
+
+当租约期过期时，清除M_Key保护位将允许任何SM读取（然后设置）M_Key。
+
+C14-21: 当PortInfo:M_KeyLeasePeriod设置为零时，租约期永不过期。
+
+是否有带外机制来重置由租约期为零保护的数据超出了规范范围。
+
+14.2.4.3 预期使用说明
+• SM负责跟踪其管理的节点的M_Key，以确保对每个节点使用正确的密钥。
+• 如果子网中存在备用SM用于冗余，则可以共享M_Key，以便轻松适应故障转移到另一个SM。
+• SM可以通过使用仅SM和特定节点知道的M_Key来对节点（或一组节点）拥有独占访问权。
+• SubnSet()始终受此机制保护，因为它可以影响节点的状态。只有在PortInfo:M_KeyProtectBits被适当设置时，SubnGet()才受保护。
+
+14.2.4.4 更新过程
+
+节点保护/所有权在一个"原子"操作中分配。
+
+C14-22: PortInfo属性中的PortInfo:M_Key、PortInfo:M_KeyProtectBits、PortInfo:M_KeyLeasePeriod组件应在一个SubnSet(PortInfo)方法中设置。
+
+返回的状态为零的SubnGetResp(PortInfo)向SM表明它已取得节点的所有权。
+
+14.2.4.5 初始化
+
+C14-23: 当初次上电或复位时，如果不使用NVRAM，端口的PortInfo:M_Key、PortInfo:M_KeyProtectBits、PortInfo:M_KeyLeasePeriod组件应设置为零；如果使用NVRAM，则设置为存储在NVRAM中的值。
+
+如果M_Key相关组件未存储在NVRAM中，PortInfo:M_Key、PortInfo:M_KeyProtectBits、PortInfo:M_KeyLeasePeriod组件可由任何主SM在子网初始化期间设置。不考虑M_KeyLeasePeriod初始化为零（无限）的情况，每当端口的M_Key相关组件未存储在NVRAM中时，任何子网管理器都可以在子网初始化期间成功读取然后设置端口的M_Key。
+
+14.2.4.6 SMI
+
+SMI不会检查SMP头部中的M_Key，因为这是驻留在SMI后面的管理实体的责任。
+
+14.2.5 属性
+
+在SMP中，属性最多可达64字节。表129"子网管理属性（摘要）"（第810页）汇总了子网管理属性，表130"子网管理属性/方法映射"（第811页）指示哪些方法适用于每个属性。
+
+C14-24: 此合规声明已过时，已被C14-24.1.1替代：
+
+C14-24.1.1: 子网管理实体应支持表129"子网管理属性（摘要）"（第810页）和表130"子网管理属性/方法映射"（第811页）中列出的属性和方法。表129中未列出的所有属性ID均为保留。
+
+表129 子网管理属性（摘要）
+属性名称               属性ID    AttributeModifier        描述                           适用于
+Notice                 0x0002    0x0000_0000             关联通知或Trap()的信息。       所有节点上的所有端口
+                                                         见14.2.5.1。
+NodeDescription        0x0010    0x0000_0000             节点描述字符串。               所有节点
+                                                         见14.2.5.2。
+NodeInfo               0x0011    0x0000_0000             通用节点数据。                 所有节点上的所有端口
+                                                         见14.2.5.3。
+SwitchInfo             0x0012    0x0000_0000             交换机信息。                   交换机
+                                                         见14.2.5.4。
+GUIDInfo               0x0014    GUID块                  分配的GUID。                   所有端口
+                                                         见14.2.5.5。
+PortInfo               0x0015    端口号                  端口信息。                     所有节点上的所有端口
+                                                         见14.2.5.6。
+P_KeyTable             0x0016    端口号/P_Key块          分区表。                       所有节点上的所有端口
+                                                         见14.2.5.7。
+SLtoVLMappingTable     0x0017    输入/输出端口号         SL到VL映射信息。               所有节点上的所有端口
+                                                         见14.2.5.8。                    （可选a）
+VLArbitrationTable     0x0018    输出端口/组件           权重列表。                     所有节点上的所有端口
+                                                         见14.2.5.9。                    （可选b）
+LinearForwardingTable  0x0019    块标识符                线性转发表信息。               交换机
+                                                         见14.2.5.10。                   （可选c）
+RandomForwardingTable  0x001A    块标识符                随机转发表信息。               交换机
+                                                         见14.2.5.11。                   （可选c）
+MulticastForwardingTable 0x001B  块标识符                组播转发表信息。               交换机
+                                                         见14.2.5.12。                   （可选）
+SMInfo                 0x0020    0x0000_0000-0x0000_0005 子网管理信息。                 所有托管SM的节点
+                                                         见14.2.5.13。
+VendorDiag             0x0030    0x0000_0000-0x0000_FFFF 供应商特定诊断。               所有节点上的所有端口
+                                                         见14.2.5.14。
+LedInfo                0x0031    0x0000_0000             打开/关闭LED。                 所有节点
+                                                         见14.2.5.15。                   （可选）
+0xFF00-0xFFFF                    0x0000_0000-0xFFFF_FFFF 为供应商特定属性保留的范围。
+
+a. 在仅支持一个数据VL的端口上为可选。
+b. 在仅支持一个数据VL的端口上为禁止。
+c. LinearForwardingTable和RandomForwardingTable互斥，但必须有其一。
+
+表130 子网管理属性/方法映射
+属性名称                Get    Set    Trap    TrapRepress
+Notice                  X      X      X       X
+NodeDescription         X
+NodeInfo                X
+SwitchInfo              X      X
+GUIDInfo                X      X
+PortInfo                X      X
+P_KeyTable              X      X
+SLtoVLMappingTable      X      X
+VLArbitrationTable       X      X
+LinearForwardingTable   X      X
+RandomForwardingTable   X      X
+MulticastForwardingTable X     X
+SMInfo                  X      X
+VendorDiag              X
+LedInfo                 X      X
+
+以下各节中描述的一些SM属性（LinearForwardingTable、RandomForwardingTable、MulticastForwardingTable、VLArbitrationTable、GUIDInfo和P_KeyTable）用于加载和读取交换机和CA中表的内容。每个属性使用一个表条目块和使用MadHeader:AttributeModifier组件指定的偏移量进入表中。连续的块元素从指定的偏移量开始加载或读取。
+
+块中的表条目数是固定的，偏移量（AttributeModifier）以块大小为单位指定。此外，不要求实际表长度（如相关的Cap或Top组件所示）是块大小的整数倍。
+
+只要块的某些条目寻址有效的表条目，这就不是错误。对应于无效表条目的块元素在写入时被忽略，在读回时为全零。
+
+但是，如果块条目都不寻址有效的表条目，则意味着AttributeModifier值指定的偏移量超过了表的末尾（Cap或Top）。在这种情况下，返回MADHeader:Status.Code为7，因为那是无效属性修饰符值的状态代码（见13.4.7节"状态字段"第731页）。伴随该状态代码的属性内容是实现特定的。
+
+14.2.5.1 通知和陷阱
+
+此属性是13.4.8.2节"通知"（第737页）中描述的通用属性。以下陷阱为子网管理类定义。
+
+表131 陷阱
+陷阱号    类型a    发送节点类型    数据详情
+64       信息性    子网管理器     <GIDADDR>现在在服务中；见14.4.9节"进入和退出服务陷阱"（第880页）
+65       信息性    子网管理器     <GIDADDR>退出服务；见14.4.9节"进入和退出服务陷阱"（第880页）
+66       信息性    子网管理器     具有组播地址<GIDADDR>的新组播组现已创建；见14.4.10节"组播组创建/删除陷阱"（第880页）
+67       信息性    子网管理器     具有组播地址<GIDADDR>的组播组现已删除；见14.4.10节"组播组创建/删除陷阱"（第880页）
+128      紧急      交换机         <LIDADDR>处交换机的至少一个端口的链路状态已更改；见14.3.6节"端口状态变化"（第855页）。
+129      紧急      任意           <LIDADDR><PORTNO>处的本地链路完整性阈值已达到
+130      紧急      任意           <LIDADDR><PORTNO>处的过度缓冲区溢出阈值已达到
+131      紧急      交换机         <LIDADDR><PORTNO>处的流控更新看门狗计时器已过期
+144      信息性    任意           <LIDADDR>处的CapabilityMask已被修改，其新值为<CAPABILITYMASK>。此陷阱是可选的；见14.3.11节"更改CapabilityMask"（第858页）。
+145      信息性    任意           <LIDADDR>处的SystemImageGUID已被修改，其新值为<SYSTEMIMAGEGUID>。此陷阱是可选的；见14.3.12节"更改SystemImageGUID"（第858页）
+256      安全      任意           错误的M_Key，<MKEY>从<LIDADDR>尝试<METHOD>与<ATTRIBUTEID>和<ATTRIBUTEMODIFIER>；如果MAD是定向路由，见C14-24.1.2（第813页）和C14-24.1.3（第813页）
+257      安全      任意           错误的P_Key，<KEY>从<LIDADDR1>/<GIDADDR1>/<QP1>到<LIDADDR2>/<GIDADDR2>/<QP2>在<SL>上。
+258      安全      任意           错误的Q_Key，<KEY>从<LIDADDR1>/<GIDADDR1>/<QP1>到<LIDADDR2>/<GIDADDR2>/<QP2>在<SL>上。
+259      安全      交换机         错误的P_Key <PKEY>从<LIDADDR1>/<GIDADDR1>/<QP1>到<LIDADDR2>/<GIDADDR2>/<QP2>在<SL>上，在交换机<LIDADDR>外部端口<PORTNO>处，其中所有上述字段的有效性由<DataValid>指示。此陷阱是可选的；见14.3.7节"交换机外部端口上的P_Key不匹配"（第856页）。
+
+a. 对于这些陷阱，类型字段在使用通知属性的所有MAD中被忽略。
+
+陷阱使用下面表格中显示的布局作为其通知属性的DataDetails组件。
+
+C14-24.1.2: 除非SMA实现了定向路由通知选项（由PortInfo:CapabilityMask.IsDRNoticeSupported指示），否则名称以字母"DR"开头的所有SMP通知DataDetails（用于陷阱256）的所有组件在读取时应被忽略；其内容未指定。
+
+C14-24.1.3: 如果SMA实现了定向路由通知选项（PortInfo:CapabilityMask.IsDRNoticeSupported=1），且M_Key违规是由LID路由SMP的到达引起的，SMA应将相关通知的DataDetails的DRNotice属性设置为0。如果M_Key违规是由定向路由SMP的到达引起的，SMA应按以下方式设置相关通知的DataDetails中的以下通知属性：
+
+• DRNotice应设置为1。
+• 如果定向路由SMP的返回路径足够短，可以完全放入通知的DRNoticeReturnPath组件中，则DRPathTruncated应设置为0；否则DRPathTruncated应设置为1。
+• DRHopCount应设置为放置在此通知中的跳数。
+• DRSLID应设置为定向路由SMP的DrSLID组件。
+• SMP的ReturnPath应放置在DRNoticeReturnPath字段中。最低偏移的ReturnPath字节应放在最低偏移的DRNoticeReturnPath字节中；次低偏移的放在次低偏移中；依此类推。如果ReturnPath太长，无法放入通知的DRNoticeReturnPath中，则ReturnPath的最高偏移字节不被记录。
+
+此通知的生成发生在SMA中，在定向路由SMP被SMI处理之后。
+
+表132 陷阱64、65、66和67的通知DataDetails
+字段        长度(位)    描述
+Reserved    48          保留
+GIDADDR     128         全局标识符
+Padding     256         在读取时应被忽略。内容未指定。
+
+表133 陷阱128的通知DataDetails
+字段        长度(位)    描述
+LIDADDR     16          本地标识符
+Padding     416         在读取时应被忽略。内容未指定。
+
+表134 陷阱129、130和131的通知DataDetails
+字段        长度(位)    描述
+Reserved    16          保留
+LIDADDR     16          本地标识符
+PORTNO      8           端口号
+Padding     392         在读取时应被忽略。内容未指定。
+
+表135 陷阱144的通知DataDetails
+字段              长度(位)    描述
+Reserved          16          保留
+LIDADDR           16          本地标识符
+Reserved          16          保留
+CAPABILITYMASK    32          <LIDADDR>处的CapabilityMask内容
+Padding           352         在读取时应被忽略。内容未指定。
+
+表136 陷阱145的通知DataDetails
+字段              长度(位)    描述
+Reserved          16          保留
+LIDADDR           16          本地标识符
+Reserved          16          保留
+SYSTEMIMAGEGUID   64          <LIDADDR>处的SystemImageGUID内容
+Padding           320         在读取时应被忽略。内容未指定。
+
+表137 陷阱256的通知DataDetails
+字段                长度(位)    描述
+Reserved            16          保留
+LIDADDR             16          本地标识符
+DRSLID              16          引起此通知的定向路由SMP的DrSLID（如有）。见C14-24.1.3（第813页）
+METHOD              8           方法
+Reserved            8           保留
+ATTRIBUTEID         16          属性ID
+ATTRIBUTEMODIFIER   32          AttributeModifier
+MKEY                64          M_Key
+Reserved            8           保留
+DRNotice            1           指示此通知是否由定向路由SMP引起。见C14-24.1.3（第813页）。
+DRPathTruncated     1           指示DRNoticeReturnPath被截断。见C14-24.1.3（第813页）。
+DRHopCount          6           DRNoticeReturnPath中的字节数。见C14-24.1.3（第813页）。
+DRNoticeReturnPath  240         来自定向路由SMP的ReturnPath。见C14-24.1.3（第813页）。
+
+表138 陷阱257和258的通知DataDetails
+字段        长度(位)    描述
+Reserved    16          保留
+LIDADDR1    16          本地标识符
+LIDADDR2    16          本地标识符
+KEY         32          Q_Key或P_Key。
+                        如果是P_Key，字段的16个最高有效位应设置为0，16个最低有效位应设置为P_Key。
+SL          4           服务级别
+Reserved    4           保留
+QP1         24          队列对
+Reserved    8           保留
+QP2         24          队列对
+GIDADDR1    128         全局标识符。如果违规数据包中没有GRH，此字段应填充零。
+GIDADDR2    128         全局标识符。如果违规数据包中没有GRH，此字段应填充零。
+Padding     32          在读取时应被忽略。内容未指定。
+
+表139 陷阱259的通知DataDetails
+字段        长度(位)    描述
+DataValid   16          指示可选数据字段的有效性；0 = 字段无效；1 = 字段有效：
+                        • bit 0: LIDADDR1
+                        • bit 1: LIDADDR2
+                        • bit 2: PKEY
+                        • bit 3: SL
+                        • bit 4: QP1
+                        • bit 5: QP2
+                        • bit 6: GIDADDR1
+                        • bit 7: GIDADDR2
+                        • bits 8-15: 保留
+LIDADDR1    16          本地标识符
+LIDADDR2    16          本地标识符
+PKEY        16          P_Key
+SL          4           服务级别
+Reserved    4           保留
+QP1         24          队列对
+Reserved    8           保留
+QP2         24          队列对
+GIDADDR1    128         全局标识符。当DataValid bit 6为1时，应设置为零以指示违规数据包中缺少GRH。
+GIDADDR2    128         全局标识符。当DataValid bit 7为1时，应设置为零以指示违规数据包中缺少GRH。
+SWLIDADDR   16          交换机的本地标识符
+PORTNO      8           端口号
+Padding     24          在读取时应被忽略。内容未指定。
+
+14.2.5.2 NodeDescription
+
+NodeDescription属性的内容对于节点上的所有端口都是相同的。
+
+表140 NodeDescription
+组件         访问    长度(位)    描述
+NodeString   RO      512        UTF-8编码的字符串，用于以文本格式描述节点。
+
+14.2.5.3 NodeInfo
+
+NodeInfo属性提供所有CA、路由器和交换机共有的基本管理信息。所有节点都应实现它。某些NodeInfo组件的值因节点内的端口而异。
+
+表141 NodeInfo
+组件               访问    长度(位)    偏移(位)    描述
+BaseVersion(a)     RO      8           0           支持的MAD基本版本。指示此节点支持到（并包括）此版本。设置为1。
+ClassVersion(a)    RO      8           8           支持的子网管理类（SMP）版本。指示此节点支持到（并包括）此版本。设置为1。
+NodeType(a)        RO      8           16          1: 通道适配器  2: 交换机  3: 路由器  0, 4-255: 保留
+NumPorts(a)        RO      8           24          此节点上的物理端口数。
+SystemImageGUID(a) RO      64          32          将此节点与由共同管理代码控制的其他节点关联的GUID。提供了一种方式让系统软件指示通过多个节点到同一目的地的多路径可用性。如果不需要节点关联指示，则设置为零。如果关联节点之一不可现场替换，SystemImageGUID可以是其中一个关联节点的NodeGUID。
+NodeGUID(a)        RO      64          96          HCA、TCA、交换机或路由器本身的GUID。同一节点上的所有端口应报告相同的NodeGUID。提供了在子网内唯一标识节点和确定端口共存的方法。
+PortGUID(b)        RO      64          160         此端口本身的GUID。如果端口是节点的组成部分且不可现场替换，则节点内的一个端口可以返回NodeGUID作为其PortGUID。
+PartitionCap(a)    RO      16          224         CA、路由器和交换机管理端口的分区表中的条目数。对于所有节点（包括交换机），至少设置为1。
+DeviceID(a)        RO      16          240         由设备制造商分配的设备ID信息。
+Revision(a)        RO      32          256         设备修订版本，由制造商分配。
+LocalPortNum       RO      8           288         接收此SMP的链路端口号。
+VendorID(a)        RO      24          296         设备供应商，按IEEE。
+
+a. 节点上所有端口的值应相同。
+b. CA或路由器上每个端口的值应不同，但交换机上所有端口的值相同。
+
+14.2.5.4 SwitchInfo
+
+SwitchInfo属性提供交换机节点特有的管理信息。所有交换机都应实现它。
+
+表142 SwitchInfo
+组件                       访问    长度(位)    偏移(位)    描述
+LinearFDBCap               RO      16          0           线性单播转发表中支持的条目数（从LID=0x0000开始递增）。LinearFDBCap = 0表示没有线性转发表。
+RandomFDBCap               RO      16          16          随机单播转发表中支持的条目数。RandomFDBCap = 0表示没有随机转发表。
+MulticastFDBCap            RO      16          32          组播转发表中支持的条目数（从LID=0xC000开始递增）。
+LinearFDBTop               RW      16          48          指示线性转发表的顶部。接收的单播DLID大于此值的数据包将被交换机丢弃。有效的LinearFdbTop小于LinearFdbCap。此组件仅适用于实现线性转发表的交换机，被实现随机转发表的交换机忽略。
+DefaultPort                RW      8           64          将来自其他端口的所有DLID不存在于随机转发表中的单播数据包转发到此端口，见第18章：交换机。如果设置为不存在的端口，后续响应可能包含任何不存在的端口号。
+DefaultMulticastPrimaryPort  RW    8           72          将来自其他端口的所有DLID不存在于转发表中的组播数据包转发到此端口，见18.2.4.3.3节"必需的组播中继"（第1053页）。如果设置为不存在的端口，后续响应可能包含任何不存在的端口号。
+DefaultMulticastNotPrimaryPort RW  8           80          将来自默认主端口的所有DLID不存在于转发表中的组播数据包转发到此端口，见18.2.4.3.3节"必需的组播中继"（第1053页）。如果设置为不存在的端口，后续响应可能包含任何不存在的端口号。
+LifeTimeValue              RW      5           88          设置数据包在交换机中的存活时间，见18.2.5.4节"发送器排队"（第1057页）。
+PortStateChange            RW      1           93          当任何端口的PortInfo的PortState组件由于链路状态机逻辑从Down转变为Initialize、Initialize转变为Down、Armed转变为Down或Active转变为Down时，设置为1。由SubnSet()导致的PortState变化不会改变此位。此位通过写入1来清除，写入0被忽略。
+Reserved                   RO      2           94          保留
+LIDsPerPort                RO      16          96          指定对于支持随机转发表的交换机，可分配给给定外部端口的LID/LMC组合数。
+PartitionEnforcementCap    RO      16          112         指定每个物理端口的分区强制表中的条目数。零表示交换机不支持分区强制。
+InboundEnforcementCap      RO      1           128         指示交换机能够对接收的数据包进行分区强制
+OutboundEnforcementCap     RO      1           129         指示交换机能够对发送的数据包进行分区强制
+FilterRawInboundCap        RO      1           130         指示交换机能够对接收的数据包进行原始数据包强制
+FilterRawOutboundCap       RO      1           131         指示交换机能够对发送的数据包进行原始数据包强制
+EnhancedPort0              RO      1           132         当设置为1时，指示交换机端口0支持增强功能（TCA端口）。当设置为0时，指示交换机端口0是基本交换机端口0。
+Reserved                   RO      3           133         保留
+
+14.2.5.5 GUIDInfo
+
+GUIDInfo属性提供了为通道适配器、路由器和增强交换机管理端口设置已分配的本地范围EUI-64标识符的方法。这些本地范围EUI-64标识符与子网前缀连接形成GID，在4.1.1节"GID使用和属性"（第143页）中描述。
+
+AttributeModifier是指向此属性所适用的8个GUID块的指针。有效值为0到31，并进一步受端口的GUIDCap大小限制；见14.2.5节"属性"（第809页）。第一个GUIDBlock（AttributeModifier = 0）偏移零处的GUID块元素是只读的，是PortGUID组件的副本。
+
+所选属性对应于接收SMP的端口。
+
+表143 GUIDInfo
+组件         访问    长度(位)    描述
+GUIDBlock    RW      512        8个GUID块元素的列表。
+
+表144 GUID块元素
+组件    长度(位)    描述
+GUID    64         要分配给端口的GUID。
+
+14.2.5.6 PortInfo
+
+PortInfo属性提供端口特定的管理信息。节点上的每个端口都应实现它。请注意，某些PortInfo组件的值因节点类型和节点内的端口而异。
+
+AttributeModifier选择执行SMP指定操作的端口。对于交换机、通道适配器和路由器，值范围在0到N之间，其中N是端口数：
+
+• 对于通道适配器和路由器，零值表示操作在接收SMP的端口上执行。否则，如果值非零且不匹配接收SMP的端口号，则PortInfo属性为只读，且M_Key同时在接收SMP的端口和由AttributeModifier选择的端口上检查。
+• 对于交换机，零值选择管理端口。否则，如果值非零，则选择物理端口。
+
+C14-24.2.1: 如果PortInfo:PortState=Down，则
+• SubnGet(PortInfo)应为PortInfo:PortState和PortInfo:PortPhysicalState产生有效数据；任何其他组件是否有有效数据取决于供应商。
+• SubnSet(PortInfo)应对PortInfo:PortPhysicalState做出其指定的任何更改；任何其他结果取决于供应商。
+
+在表145 PortInfo中，"使用者"列指示特定类型端口如何以及是否使用某组件：通道适配器（CA）、路由器（Router）、交换机外部端口（Sw Ext.）、基本交换机端口0（Base SP0）和增强交换机端口0（Enh. SP0）。列中使用的符号是：X = 必需；0 = 必须为0；1 = 必须为1；空白 = 未使用。
+
+表145 PortInfo（主要组件）
+组件                    使用者                  访问    长度(位)    偏移(位)    描述
+M_Key                   CA,Router,SwExt,SP0     RW      64          0           8字节管理密钥。见14.2.4节"管理密钥"（第806页）。
+GidPrefix               CA,Router,SwExt,SP0     RW      64          64          此端口的GID前缀。
+LID                     CA,Router,SwExt,SP0     RW      16          128         此端口的基本LID。
+MasterSMLID             CA,Router,SwExt,SP0     RW      16          144         管理此端口的主SM的LID。
+CapabilityMask          CA,Router,SwExt,SP0     RO      32          160         此节点支持的功能。位设置为1表示确认支持的功能。
+                                                                                0: 保留
+                                                                                1: IsSM
+                                                                                2: IsNoticeSupported
+                                                                                3: IsTrapSupported
+                                                                                4: IsOptionalIPDSupported
+                                                                                5: IsAutomaticMigrationSupported
+                                                                                6: IsSLMappingSupported
+                                                                                7: IsMKeyNVRAM（支持NVRAM中的M_Key）
+                                                                                8: IsPKeyNVRAM（支持NVRAM中的P_Key）
+                                                                                9: IsLEDInfoSupported
+                                                                                10: IsSMdisabled
+                                                                                11: IsSystemImageGUIDSupported
+                                                                                12: IsPKeySwitchExternalPortTrapSupported
+                                                                                13-15: 保留
+                                                                                16: IsCommunicationManagementSupported
+                                                                                17: IsSNMPTunnelingSupported
+                                                                                18: IsReinitSupported
+                                                                                19: IsDeviceManagementSupported
+                                                                                20: IsVendorClassSupported
+                                                                                21: IsDRNoticeSupported
+                                                                                22: IsCapabilityMaskNoticeSupported
+                                                                                23: IsBootManagementSupported
+                                                                                24: IsLinkRoundTripLatencySupported
+                                                                                25: IsClientReregistrationSupported
+                                                                                26-31: 保留
+DiagCode                CA,Router,SwExt,SP0     RO      16          192         诊断代码，如14.2.5.6.1节"DiagCode的解释"（第832页）所述。
+M_KeyLeasePeriod        CA,Router,SwExt,SP0     RW      16          208         指定租约期计时器的初始值（秒）。租约期是SubnSet(PortInfo)M_Key检查失败后M_Key保护位保持非零的时间长度。见14.2.4节"管理密钥"（第806页）。
+LocalPortNum            全部                     RO      8           224         接收此SMP的链路端口号。
+LinkWidthEnabled        CA,Router,SwExt,SP0     RW      8           232         启用的链路宽度。0: 无状态变化（仅在Set()上有效）；1: 1x；2: 4x；3: 1x或4x；4: 8x；...；15: 1x或4x或8x或12x；255: 设置为LinkWidthSupported值。更改此组件不会立即生效。
+LinkWidthSupported      CA,Router,SwExt,SP0     RO      8           240         支持的链路宽度。
+LinkWidthActive         CA,Router,SwExt,SP0     RO      8           248         当前活动的链路宽度。
+LinkSpeedSupported      CA,Router,SwExt,SP0     RO      4           256         支持的链路速度。1: 2.5 Gbps；3: 2.5或5.0 Gbps；5: 2.5或10.0 Gbps；7: 2.5或5.0或10.0 Gbps。
+PortState               CA,Router,SwExt,SP0     RW      4           260         端口状态。枚举为：0: 无状态变化（仅在Set()上有效）；1: Down（包括失败的链路）；2: Initialize；3: Armed；4: Active；5-15: 保留。写入此字段时，仅合法转换有效。见7.2节"链路状态"（第168页）。
+PortPhysicalState       CA,Router,SwExt,SP0     RW      4           264         0: 无状态变化（仅在Set()上有效）；1: Sleep；2: Polling；3: Disabled；4: PortConfigurationTraining；5: LinkUp；6: LinkErrorRecovery；7: Phy Test；8-15: 保留。
+LinkDownDefaultState    CA,Router,SwExt,SP0     RW      4           268         0: 无状态变化（仅在Set()上有效）；1: Sleep；2: Polling；3-15: 保留。
+M_KeyProtectBits        CA,Router,SwExt,SP0     RW      2           272         见14.2.4节"管理密钥"（第806页）。
+LMC                     CA,Router,0,SP0         RW      3           277         用于多路径支持的LID掩码计数；其用法在7.11节"子网多路径"（第219页）中描述。
+LinkSpeedActive         CA,Router,SwExt,SP0     RO      4           280         当前活动的链路速度。1: 2.5 Gbps；2: 5.0 Gbps；4: 10.0 Gbps。
+LinkSpeedEnabled        CA,Router,SwExt,SP0     RW      4           284         启用的链路速度。0: 无状态变化；1: 2.5 Gbps；...；15: 设置为LinkSpeedSupported值。
+NeighborMTU             CA,Router,SwExt,SP0     RW      4           288         此端口上启用的用于传输的活动最大MTU：1: 256；2: 512；3: 1024；4: 2048；5: 4096。
+MasterSMSL              CA,Router,SwExt,SP0     RW      4           292         管理此端口的主SM的管理SL。
+VLCap                   CA,Router,SwExt,SP0     RO      4           296         此端口上支持的虚拟通道。1: VL0；2: VL0,VL1；3: VL0-VL3；4: VL0-VL7；5: VL0-VL14。
+InitType                CA,Router,SwExt,SP0     RO      4           300         可选；如果未实现则为0。此端口在SM将其移至Active或Armed状态之前请求的初始化类型。见14.4.4节"节点重新初始化"（第871页）。
+VLHighLimit             CA,Router,SwExt,SP0     RW      8           304         VL仲裁表高优先级组件的限制。
+VLArbitrationHighCap    CA,Router,SwExt,SP0     RO      8           312         此端口上VL仲裁表中高优先级支持的VL/权重对。如果此端口支持多于一个数据VL，则为1到64，否则为0。
+VLArbitrationLowCap     CA,Router,SwExt,SP0     RO      8           320         此端口上VL仲裁表中低优先级支持的VL/权重对。
+InitTypeReply           CA,Router,SwExt,SP0     RW      4           328         由SM在将端口更改为Active或Armed状态之前写入。可选；如果未实现则设置为全0。指示执行的初始化类型。见14.4.4节"节点重新初始化"（第871页）。
+MTUCap                  CA,Router,SwExt,SP0     RO      4           332         此端口支持的最大MTU。1: 256；2: 512；3: 1024；4: 2048；5: 4096。
+VLStallCount            SwExt                   RW      3           336         指定导致端口进入VLStalled状态的连续丢弃数据包数。
+HOQLife                 SwExt,SP0               RW      5           339         设置数据包在VL队列头部可以存活的时间。
+OperationalVLs          CA,Router,SwExt,SP0     RW      4           344         此端口上运行的虚拟通道。0: 无变化（仅在Set()上有效）；1: VL0；2: VL0,VL1；3: VL0-VL3；4: VL0-VL7；5: VL0-VL14。
+PartitionEnforcementInbound    SwExt            RW      1           348         指示支持可选的分区强制。如果设置为1，则在此端口上接收的数据包上启用分区强制。
+PartitionEnforcementOutbound   SwExt            RW      1           349         如果设置为1，则在从此端口发送的数据包上启用分区强制。
+FilterRawInbound        SwExt                   RW      1           350         指示支持可选的原始数据包强制。如果设置为1，则丢弃到达此端口的原始数据包。
+FilterRawOutbound       SwExt                   RW      1           351         如果设置为1，则丢弃从此端口离开的原始数据包。
+M_KeyViolations         CA,Router,SwExt,SP0     RW      16          352         计算自上电或复位以来在此端口接收的具有无效M_Key的SMP数据包数。递增直到计数达到全1，然后应设置回零以重新启用递增。
+P_KeyViolations         CA,Router,SwExt,SP0     RW      16          368         计算自上电或复位以来在此端口接收的具有无效P_Key的数据包数。
+Q_KeyViolations         CA,Router,SwExt,SP0     RW      16          384         计算自上电或复位以来在此端口接收的具有无效Q_Key的数据包数。
+GUIDCap                 CA,Router,SwExt,SP0     RO      8           400         此端口的GUIDInfo属性中支持的GUID条目数。
+ClientReregister        CA,Router,SwExt,SP0     RW      1           408         可选：如果未实现则为0。SM用于请求端节点客户端重新注册SA订阅。见14.4.11节"客户端重新注册"（第881页）。
+SubnetTimeOut           CA,Router,SwExt,SP0     RW      5           411         指定最大预期子网传播延迟，取决于交换机的配置，用于到达子网中的任何其他端口，也应用于确定可从此端口发送SubnTrap()的最大速率。持续时间计算基于(4.096 µsec × 2^SubnetTimeOut)。
+RespTimeValue           CA,Router,SwExt,SP0     RO      5           419         指定端口接收SMP和发送关联响应之间的预期最大时间。持续时间计算基于(4.096 µsec × 2^RespTimeValue)。
+LocalPhyErrors          CA,Router,SwExt,SP0     RW      4           424         阈值。当边际链路错误计数超过此阈值时，应检测到本地链路完整性错误。
+OverrunErrors           CA,Router,SwExt,SP0     RW      4           428         阈值。当连续流控更新期间的缓冲区溢出计数超过此阈值时，应检测到过度缓冲区溢出错误。
+MaxCreditHint           CA,Router,SwExt,SP0     RO      16          432         可选；如果未实现则为0。此值提供端口上每个VL可用的最大信用数的供应商相关指示。
+LinkRoundTripLatency    CA,Router,SwExt,0       RO      24          456         可选；如果未实现则为0。此值表示连接到此端口的链路往返延迟的测量值。它是一个无符号24位整数，计数4 nsec间隔。
+
+14.2.5.6.1 DiagCode的解释
+
+IBA网络的端口将在其非IBA端连接功能。16位PortInfo:DiagCode字段为这些非IBA功能提供通用和供应商特定的诊断状态。它仅在端口上有效，所有位设置为零表示功能状态良好。任何非零值表示可能存在错误条件。
+
+PortInfo:DiagCode可以提供三个级别的诊断数据：
+• 高级别、通用的状态代码集。PortInfo:DiagCode全零表示不存在异常条件。PortInfo:DiagCode位3-0的非零值对于所有非IBA附加功能具有相同含义；这些含义在下面的表146中记录。
+• 可选的高级别供应商特定诊断代码（位14-4）。解释此字段需要了解端口后面功能支持的诊断代码。
+• 可选的更详细的供应商特定端口属性（由PortInfo:DiagCode指向）。此信息的可用性由PortInfo:DiagCode的位15指示，相关端口属性由位14-4指向。
+
+图190 DiagCode字段
+
+表146 DiagCode位3-0的标准编码
+DiagCode位3-0    描述
+0x0              功能就绪
+0x1              正在执行自测试
+0x2              正在初始化
+0x3              软错误 - 功能有非致命错误，可以使用
+0x4              硬错误 - 功能不可使用
+0x5 - 0xF        保留
+
+位14-4用于供应商特定的标准诊断信息修饰符。
+
+如果位15（IndexForward位）为零(0)，位14-4表示供应商特定诊断代码。返回信息的解释超出本规范范围。
+
+如果IndexForward位设置为1，PortInfo:DiagCode字段的位14-4用于索引到VendorDiag属性数据中获取供应商特定诊断信息。这允许基于异常类型的诊断信息动态链接。位14-4被解释为与SubnGet(VendorDiag)一起指定的AttributeModifier，用于检查在14.2.5.14节"VendorDiag"（第840页）中定义的端口。
+
+图191 DiagCode位示例
+
+14.2.5.7 P_KeyTable
+
+P_KeyTable属性提供为端口分配P_Key的方法。
+
+AttributeModifier分为两半：
+• 最低有效的16位是指向此属性所适用的32个P_Key条目块的指针。有效值为0-2047，进一步受该节点的P_Key表大小限制。见14.2.5节"属性"（第809页）。
+• 对于交换机，高16位选择交换机端口，其中有效值为1-254选择物理端口，零选择交换机管理端口。
+
+对于CA和路由器，高16位被忽略，操作在接收SMP的端口上执行。
+
+表147 P_KeyTable
+组件              访问    长度(位)    描述
+P_KeyTable Block  RW      512        32个P_Key块元素的列表。
+
+表148 P_Key块元素
+组件              长度(位)    描述
+MembershipType    1          如果设置为零，P_Key为受限类型，端节点可以接受具有匹配完整P_Key的数据包，但不能接受具有匹配受限P_Key的数据包。如果设置为1，P_Key为完整类型，端节点可以接收具有匹配完整或受限P_Key的数据包。
+P_KeyBase         15         端节点将用于对照传入数据包检查的P_Key基本值。
+
+14.2.5.8 SLtoVLMappingTable
+
+SLtoVLMappingTable属性提供了设置交换机、CA和路由器的SL到VL映射的方法，其使用在7.6.6节"子网内的VL映射"（第186页）中描述。
+
+对于交换机，此属性特定于应用特定SL到VL映射的输入端口/输出端口组合：
+• 位31-16必须为零。
+• AttributeModifier的位15-8指定输入端口，可以是1到N，其中N选择物理端口，或0表示输入端口是管理端口。
+• AttributeModifier的位7-0指定输出端口，可以是1到N，其中N选择物理端口。对于支持增强交换机端口0的实现，N = 0表示管理端口。
+
+对于CA和路由器，此属性对应于接收SMP的端口（AttributeModifier被忽略）。
+
+表149 SLtoVLMappingTable
+组件       访问    长度(位)    偏移(位)    描述
+SL0toVL    RW      4           0           使用SL0的数据包输出的VL号。15强制丢弃数据包。
+SL1toVL    RW      4           4           与SL1关联的VL
+...（SL2toVL到SL15toVL，依此类推）
+SL15toVL   RW      4           60          与SL15关联的VL
+
+14.2.5.9 VLArbitrationTable
+
+VLArbitrationTable属性提供了为CA、路由器和交换机上的端口设置VL仲裁的方法；其使用在7.6.9节"VL仲裁和优先级"（第188页）中描述。
+
+AttributeModifier分为两半。高16位指定访问的表的部分。
+• 1 - 低优先级VL仲裁表的低32个条目。
+• 2 - 低优先级VL仲裁表的高32个条目。
+• 3 - 高优先级VL仲裁表的低32个条目。
+• 4 - 高优先级VL仲裁表的高32个条目。
+• 0, 5-65535 - 保留。
+
+对于交换机，AttributeModifier的最低有效16位在位7-0中指定外部端口或增强（非基本）端口0；位15-8为保留。
+
+对于CA和路由器，此属性对应于接收SMP的端口（AttributeModifier的低16位被忽略）。
+
+表150 VLArbitrationTable
+组件              访问    长度(位)    偏移(位)    描述
+VL/Weight对       RW      512         0           32个VL/Weight块元素的列表，给定优先级总共可达64个。
+
+表151 VL/Weight块元素
+组件       长度(位)    偏移(位)    描述
+Reserved   4           0           保留
+VL         4           4           与元素关联的VL。
+Weight     8           8           与元素关联的权重，如7.6.9节"VL仲裁和优先级"（第188页）中定义，零表示跳过此元素。
+
+14.2.5.10 LinearForwardingTable
+
+LinearForwardingTable属性提供了为单播LID设置交换机线性转发表的方法。
+
+AttributeModifier是指向此属性所适用的64个LID块的指针。有效值为0到767，进一步受交换机的LinearForwardingTable大小限制。实现可以选择使用SwitchInfo:LinearFDBCap或SwitchInfo:LinearFDBTop来表示LinearForwardingTable的大小。见14.2.5节"属性"（第809页）。
+
+表152 LinearForwardingTable
+组件                        访问    长度(位)    描述
+LinearForwardingTable Block RW      512        64个端口块元素的列表。
+
+表153 端口块元素
+组件    长度(位)    描述
+Port    8          与此条目对应的LID的数据包应转发到的端口。
+
+14.2.5.11 RandomForwardingTable
+
+RandomForwardingTable属性提供了为单播LID设置交换机随机转发表的方法。
+
+AttributeModifier是指向此属性所适用的16个LID/端口对块的指针。有效值为0到3071，进一步受基于SwitchInfo:RandomFDBCap的交换机RandomForwardingTable大小限制。见14.2.5节"属性"（第809页）。如果在Valid位设置为1的条目中写入无效端口号，则发送到该条目中指定LID的数据包将被丢弃，并且该条目的Port应读回为0xFF以指示使用了无效端口号。如果两个或更多条目基于LMC指定重叠的LID范围，且这些条目的Valid位设置为1，则对发送到这些LID的数据包的交换机转发行为取决于实现。
+
+表154 RandomForwardingTable
+组件                          访问    长度(位)    描述
+RandomForwardingTable Block   RW      512        16个LID/Port块元素的列表。
+
+表155 LID/Port块元素
+组件       长度(位)    偏移(位)    描述
+LID        16          0           基本LID。
+Valid      1           16          此LID/Port对有效。注意将此参数设置为0允许删除条目。
+LMC        3           17          此LID的LMC。
+Reserved   4           20          保留
+Port       8           24          与此LID/LMC对应的数据包应转发到的端口。
+
+14.2.5.12 MulticastForwardingTable
+
+MulticastForwardingTable属性提供了设置交换机组播转发表的方法。
+
+AttributeModifier的低9位是指向此属性所适用的32个PortMask条目块的指针。有效值受基于SwitchInfo:MulticastFDBCap的交换机MulticastForwardingTable大小限制。
+
+AttributeModifier的高4位指示此属性的16位PortMask条目的位置(p)。每个PortMask条目仅指定最大大小交换机的256个可能位的端口掩码中的16位。位置位的有效值受交换机端口数的限制。块中超出交换机端口数的PortMask位在写入时被忽略，在读回时为零。
+
+AttributeModifier的剩余18位（位27:9）应设置为零。
+
+图192 MulticastForwardingTable位布局
+
+表156 MulticastForwardingTable
+组件                            访问    长度(位)    描述
+MulticastForwardingTable Block  RW      512        32个PortMask块元素的列表。
+
+表157 PortMask块元素
+组件       长度(位)    描述
+PortMask   16         与此LID关联的PortMask中从位置16×p开始的16位，其中PortMask中的每一位应引用等于16×p加上位在PortMask中位置的端口号。具有此LID的传入数据包将转发到PortMask中位设置为1的所有端口。
+
+14.2.5.13 SMInfo
+
+SMInfo属性由子网管理器在子网发现和轮询期间用于交换信息，如14.4节"子网管理器"（第859页）所述。此属性应在子网管理器驻留的端口上可用。
+
+表158 SMInfo
+组件       访问    长度(位)    偏移(位)    描述
+GUID       RO      64          0           SM驻留端口的PortGUID。
+SM_Key     RO      64          64          此SM的密钥。除非请求SM已通过认证（见14.4.7节"认证"第878页），否则显示为0。
+ActCount   RO      32          128         每次SM发出SMP或执行其他管理活动时递增的计数器。由备用SM用作"心跳"指示器。
+Priority   RO      4           160         为此SM管理性分配的优先级。可由主SM重置。零为最低优先级。应提供设置此值的带外机制。如果未由带外机制设置，默认值应为零。
+SMState    RO      4           164         指示此SM状态的枚举值。枚举如下：0 - 不活动；1 - 发现中；2 - 备用；3 - 主；4-15 - 保留
+
+14.2.5.14 VendorDiag
+
+VendorDiag属性提供了一种获取供应商特定诊断信息的方法。VendorDiag:DiagData的解释特定于相关端口。它可从CA、路由器的端口和交换机的管理端口访问。
+
+14.2.5.6.1节"DiagCode的解释"（第832页）描述了PortInfo:DiagCode转发机制如何在诊断代码解释期间用于获取VendorDiag属性的地址修饰符。
+
+表159 VendorDiag
+组件        访问    长度(位)    偏移(位)    描述
+NextIndex   RO      16          0           获取诊断信息的下一个AttributeModifier。如果这是最后一个或唯一的诊断数据，则设置为零。
+DiagData    RO      496         16          供应商特定诊断信息。格式未定义。
+
+图193 索引转发诊断信息
+
+14.2.5.15 LedInfo
+
+LedInfo属性提供了使用SMP打开或关闭CA、路由器和交换机可选提供的LED的能力。此LED未指定，其实现是供应商特定的。它与本规范或IB规范其他卷指定的LED无关。CA、路由器和交换机应在PortInfo:CapabilityMask中指示其对此属性的支持。
+
+表160 LedInfo
+组件       类型    长度(位)    偏移(位)    描述
+LedMask    RW      1           0           设置为1表示LED开启，0表示LED关闭。响应数据包应指示实际LED状态。
+Reserved   RO      31          1           保留
+
+
+14.2.6 子网管理MAD状态
+
+本节提供IBTA规范卷1第13、14和16章中大量状态代码相关合规声明的综合解释。它旨在帮助互操作性。但请注意，本文档不是合规性文档。
+
+遵循此处指定的错误条件定义及其各自的错误状态处理满足符合所有与MAD状态相关的IB合规规则的最低要求。超出此处指定范围的任何额外错误条件和错误处理（不违反任何IB合规规则）可被视为实现的可选项。
+
+14.2.6.1 状态优先级
+
+在此实现方法中，各种状态设置之间存在隐式优先级。状态值越高，优先级越低。此状态优先级实现只是众多可能实现之一。它不违反也不覆盖任何已定义的合规规则。其他实现可以返回错误状态而不遵循此状态优先级。相反，如果检测到多个错误，可以在GetResp()中返回任何一个错误状态。
+
+表161 状态优先级
+优先级（0x1为最高）    Status[4:2]    违规
+1                      0x1            错误的版本。
+2                      0x2            不支持指定的方法。
+3                      0x3            不支持方法/属性组合。
+4                      0x7            属性或属性修饰符中的一个或多个字段包含无效值。
+5                      0x0            未发现上述违规。
+
+14.2.6.2 SMP版本不支持 (Status_Field [4:2] = 0x1)
+
+表162 SMP版本错误
+字段                           无效值
+BaseVersion                    超出供应商规范
+ClassVersion                   超出供应商规范
+BaseVersion + ClassVersion     超出供应商规范
+
+14.2.6.3 SMP方法不支持 (Status_Field [4:2] = 0x2)
+
+接收到包含接收实体不支持的方法的请求数据包时，以下任何一种都是可接受的：
+• 数据包被静默丢弃，不发送响应
+• 数据包以状态2返回，方法字段中的R位设置为1，不考虑方法字段的整体含义。
+• 数据包以状态2与GetResp()方法返回
+
+14.2.6.4 SMP方法/属性组合不支持 (Status_Field [4:2] = 0x3)
+
+表163 子网管理属性/方法映射错误
+属性                    Get                                Set                                Trap            TrapRepress
+Notice                  如果PortInfo:CapabilityMask.        如果PortInfo:CapabilityMask.        有效            有效
+                        IsNoticeSupported = 0则错误，       IsNoticeSupported = 0则错误，
+                        否则有效                            否则有效
+NodeDescription         有效                                错误                                错误            错误
+NodeInfo                有效                                错误                                错误            错误
+SwitchInfo              如果NodeInfo:NodeType是交换机       如果NodeInfo:NodeType是交换机       错误            错误
+                        则有效，否则错误                    则有效，否则错误
+GUIDInfo                有效                                有效                                错误            错误
+PortInfo                有效                                有效                                错误            错误
+P_KeyTable              有效                                有效                                错误            错误
+SLtoVLMappingTable      如果PortInfo:CapabilityMask.        如果PortInfo:CapabilityMask.        错误            错误
+                        IsSLMappingSupported=0则错误，      IsSLMappingSupported=0则错误，
+                        否则有效                            否则有效
+VLArbitrationTable      如果PortInfo:VLCap=1则错误，        如果PortInfo:VLCap=1则错误，        错误            错误
+                        否则有效                            否则有效
+LinearForwardingTable   如果SwitchInfo:LinearFDBCap=0       如果SwitchInfo:LinearFDBCap=0       错误            错误
+                        或NodeInfo:NodeType不是交换机       或NodeInfo:NodeType不是交换机
+                        则错误，否则有效                    则错误，否则有效
+RandomForwardingTable   如果SwitchInfo:RandomFDBCap=0       如果SwitchInfo:RandomFDBCap=0       错误            错误
+                        或NodeInfo:NodeType不是交换机       或NodeInfo:NodeType不是交换机
+                        则错误，否则有效                    则错误，否则有效
+MulticastForwardingTable 如果SwitchInfo:MulticastFDBCap=0   如果SwitchInfo:MulticastFDBCap=0   错误            错误
+                        或NodeInfo:NodeType不是交换机       或NodeInfo:NodeType不是交换机
+                        则错误，否则有效                    则错误，否则有效
+SMInfo                  如果PortInfo:CapabilityMask.        如果PortInfo:CapabilityMask.        错误            错误
+                        IsSMdisabled=0且PortInfo:           IsSMdisabled=0且PortInfo:
+                        CapabilityMask.IsSM=0则错误，       CapabilityMask.IsSM=0则错误，
+                        否则有效(a)                         否则有效(a)
+VendorDiag              有效                                错误                                错误            错误
+LedInfo                 如果PortInfo:CapabilityMask.        如果PortInfo:CapabilityMask.        错误            错误
+                        IsLEDInfoSupported=0则错误，        IsLEDInfoSupported=0则错误，
+                        否则有效                            否则有效
+供应商特定属性          如果此方法不支持供应商特定          如果此方法不支持供应商特定          错误            错误
+(0xFF00-0xFFFF)         属性则错误                          属性则错误
+其他                    错误                                错误                                错误            错误
+
+a. 如果PortInfo:CapabilityMask.IsSMdisabled = 1则丢弃数据包。
+
+14.2.6.5 SMP AttributeModifier错误 (Status_Field [4:2] = 0x7)
+
+表164列出了各属性的无效AttributeModifier值，分别针对具有BSP0的交换机和CA/路由器/具有ESP0的交换机。主要规则包括：
+
+• Notice: AM[31:0] > 0x0 为无效
+• NodeDescription: AM[31:0] > 0x0 为无效
+• NodeInfo: AM[31:0] > 0x0 为无效
+• SwitchInfo: AM[31:0] > 0x0 为无效
+• GUIDInfo: AM[31:0] > ((PortInfo:GUIDCap-1) / 8) 为无效
+• PortInfo: AM[31:0] > NodeInfo:NumPorts 为无效
+• P_KeyTable: AM[31:16] > NodeInfo:NumPorts，AM[15:0] > ((PartitionCap-1) / 32) 为无效
+• SLtoVLMappingTable: 输入/输出端口 > NodeInfo:NumPorts 为无效
+• VLArbitrationTable: 输出端口 > NodeInfo:NumPorts 为无效，以及VL仲裁容量相关检查
+• LinearForwardingTable: AM[31:0] > (LinearFDBCap或LinearFDBTop-1) / 64)或AM[31:0] > 767 为无效
+• RandomForwardingTable: AM[31:0] > ((RandomFDBCap-1) / 16)或AM[31:0] > 3071 为无效
+• MulticastForwardingTable: AM[31:28] > (NumPorts/16)或AM[8:0] > ((MulticastFDBCap-1) / 32) 为无效
+• SMInfo: 对于Set()，AM[31:0]不为0x1-0x5或无效SMInfo状态转换；对于Get()，AM[31:0]不为0x0
+• VendorDiag: AM[31:0] > 0x0000_FFFF 为无效
+• LedInfo: AM[31:0] > 0x0 为无效
+• 供应商特定属性: AM[31:0] > 0x0000_FFFF 为无效
+
+注：整数除法截断小数部分。
+
+14.2.6.6 SMP属性组件错误 (Status_Field [4:2] = 0x7)
+
+以下表格列出了与SM属性组件错误相关的SMP属性组件。这些错误只能在执行针对RW组件的SubnSet()操作时检测到。
+
+表165-181汇总了各属性的组件错误：
+
+表165 Notice属性组件错误：NoticeToggle无无效值，NoticeCount无无效值。
+表166 NodeDescription属性组件错误：所有RO组件，无组件错误。
+表167 NodeInfo属性组件错误：所有RO组件，无组件错误。
+
+表168 SwitchInfo属性组件错误：
+• LinearFDBTop: > SwitchInfo:LinearFDBCap
+• DefaultPort、DefaultMulticastPrimaryPort、DefaultMulticastNotPrimaryPort、LifeTimeValue、PortStateChange：无无效值
+
+表169 GUIDInfo属性组件错误：GUID无无效值。
+
+表170 PortInfo（CA/路由器/交换机端口0）属性组件错误：
+• M_Key: 无无效值
+• GidPrefix: 无无效值
+• LID: = 0x0000或> 0xC000 为无效
+• MasterSMLID: = 0x0000或> 0xC000 为无效
+• LinkWidthEnabled: 取决于端口支持的宽度
+• PortState: 0x2，> 0x5为无效；在Armed时设置为Arm或Down，在Active/Initialize/Down时设置为Active
+• PortPhysicalState: > 0x4为无效（增强交换机端口0为0x3为无效）
+• LinkDownDefaultState: > 0x3为无效
+• LMC: BSP0为> 0x1，CA/Router/ESP0为无无效值
+• LinkSpeedEnabled: 0x2 < LSE < 0xE 为无效
+• NeighborMTU: > PortInfo:MTUCap，= 0，> 5 为无效
+• OperationalVLs: > PortInfo:VLCap，> 5 为无效
+• 其他组件大多无无效值
+
+表171 PortInfo（交换机外部端口）属性组件错误：与表170类似但有所不同。
+
+表172 P_Key属性组件错误：MembershipType和P_KeyBase无无效值。
+表173 SLtoVLMappingTable属性组件错误：所有SLtoVL无无效值。
+表174 VLArbitrationTable属性组件错误：VL和Weight无无效值。
+表175 LinearForwardingTable属性组件错误：Port > NodeInfo:NumPorts，读回为0xFF，无错误状态！
+表176 RandomForwardingTable属性组件错误：Port > NodeInfo:NumPorts（当Valid = 0x1时），无错误状态！
+表177 MulticastForwardingTable属性组件错误：超出NodeInfo:NumPorts的PortMask位读回为0x0，无错误状态！
+表178 SMInfo属性组件错误：所有RO组件，无组件错误。
+表179 VendorDiag属性组件错误：所有RO组件，无组件错误。
+表180 LedInfo属性组件错误：LedMask无无效值。
+表181 供应商特定属性：无组件错误。
+
+14.3 子网管理代理
+
+每个CA、路由器和交换机都有一个子网管理代理（SMA），与SMI和SM通信，如13.3.2节"必需的管理器和代理"（第716页）所述。SMA将按表122"SM MAD源和目的地"（第756页）所述响应和生成SMP。本节描述SMA行为的详细要求，其中下面定义的操作假定接收了有效的SMP。如果SMP满足13.5.3节"MAD验证"（第755页）中指定的所有适用验证检查，则它是有效的。
+
+14.3.1 SubnGet()
+
+SMA可以随时从子网接收包含SubnGet()的SMP。请求者（主SM）将在SMP头部的MADHeader:M_Key字段中填入与接收SMA对应端口的M_Key值匹配的M_Key（如果它期望接收SMA检查它）。
+
+包含SubnGetResp()的SMP根据14.3.3节"SubnGetResp()"（第853页）中的规则返回。
+
+14.3.2 SubnSet()
+
+SMA可以随时从子网接收包含SubnSet()的SMP。请求者（主SM）将在SMP头部的MADHeader:M_Key字段中填入与接收SMA对应端口的M_Key值匹配的M_Key（如果它期望接收SMA检查它）。
+
+C14-25: 如果PortInfo:M_Key组件为零，SMA应使用SMP中包含的属性内容更新相应组件。
+
+C14-26: 如果PortInfo:M_Key组件非零，且M_Key匹配（如果需要）按14.2.4节"管理密钥"（第806页）中指定的规则成功，SMA应使用SMP中包含的属性内容更新相应组件。
+
+C14-27: SMA应忽略更改属性的不可设置（RO）组件的请求。
+
+包含SubnGetResp()的SMP根据14.3.3节"SubnGetResp()"（第853页）中的规则返回。
+
+14.3.3 SubnGetResp()
+
+C14-28: 当SMA接收到经验证的SubnGet()或SubnSet()且PortInfo:M_Key组件为零时，SMA应生成SubnGetResp()。
+
+C14-29: 当SMA接收到经验证的SubnGet()或SubnSet()且PortInfo:M_Key组件非零，且M_Key匹配（如果需要）按14.2.4节"管理密钥"（第806页）中指定的规则成功时，SMA应生成SubnGetResp()，否则请求将被静默丢弃。
+
+C14-30: 如果SMA生成SubnGetResp()，它应使用组件信息的适当内容填充请求中标识的属性。
+
+C14-31: 如果SMA生成SubnGetResp()，它应使用从请求SMP获得的MADHeader:TransactionID在响应SMP中。
+
+C14-32: 此合规声明已过时并被移除。
+
+如果SMA生成SubnGetResp()，SMP头部中MADHeader:M_Key的内容未定义。例如，它可以从请求中不加更改地复制或清零。如果SMA生成SubnGetResp()，它应在接收端口的PortInfo:RespTimeValue内发送包含SubnGetResp()的SMP，其中响应时间的要求在13.4.6.2节"定时器和超时"（第727页）中描述。
+
+传输响应后，SMA丢弃与该SMP关联的任何残余状态。
+
+14.3.4 SubnTrap()
+
+陷阱可由子网上的任何端口发出。支持此机制的端口将通过设置PortInfo:CapabilityMask:IsTrapSupported位来指示。
+
+o14-1: 如果SMA生成SubnTrap()，它应用零填充SMP的M_Key字段。
+
+o14-2: 如果SMA生成一系列陷阱，连续陷阱之间的间隔不应小于子网超时，由PortInfo:SubnetTimeOut组件指定。
+
+此机制用于限制子网上发送的陷阱数量。
+
+o14-3: 此合规声明已过时，已被o14-3.2.1替代。
+
+o14-3.2.1: 如果SMA生成陷阱，它只应在以下情况下发送：
+• 如果SMA驻留在CA或路由器上，要发送陷阱的端口的PortInfo:PortState为Active
+• 如果SMA驻留在具有增强交换机端口0的交换机上，增强交换机端口0的PortInfo:PortState为Active
+• 如果SMA驻留在具有基本交换机端口0的交换机上，陷阱将发送的外部交换机端口的PortInfo:PortState为Active。
+
+o14-3.a1: 如果SMA生成陷阱，它应将源LID设置为发起端口的PortInfo:LID。
+
+本节描述了用于子网管理事件报告的架构陷阱的应用。完整的子网管理类陷阱列表在14.2.5.1节"通知和陷阱"（第812页）中描述。
+
+14.3.5 SubnTrapRepress()
+
+SMA可以从子网接收包含SubnTrapRepress()的SMP，作为对SMA自身发送的SubnTrap()的反应。请求者（主SM）将在SMP头部的MADHeader:M_Key字段中填入与接收SMA对应端口的M_Key值匹配的M_Key（如果它期望接收SMA检查它）。
+
+o14-3.a2: 如果PortInfo:M_Key组件为零，SMA应按13.4.9节"陷阱"（第741页）处理SubnTrapRepress()。
+
+o14-3.a3: 如果PortInfo:M_Key组件非零，且M_Key匹配（如果需要）按14.2.4节"管理密钥"（第806页）中指定的规则成功，SMA应按13.4.9节"陷阱"（第741页）处理SubnTrapRepress()。
+
+o14-3.a4: SMA不应发送任何消息来响应有效的SubnTrapRepress()消息。
+
+14.3.6 端口状态变化
+
+交换机能够报告端口状态变化。
+
+o14-4: 此合规声明已过时并被移除。
+
+o14-5: 此合规声明已过时，已被o14-5.1.1替代。
+
+o14-5.1.1: 如果交换机支持陷阱（PortInfo:CapabilityMask.IsTrapSupported为1），其SMA应在任何可能导致SwitchInfo:PortStateChange设置为1的条件下向PortInfo:MasterSMLID指示的SM发送陷阱128。（见14.2.5.4节"SwitchInfo"第819页。）
+
+o14-6: 此合规声明已过时，已被o14-6.1.1替代。
+
+o14-6.1.1: 如果交换机支持通知（PortInfo:CapabilityMask.IsNoticeSupported为1），其SMA应在任何可能导致SwitchInfo:PortStateChange设置为1的条件下使用Notice:TrapNumber 128记录通知。
+
+陷阱或通知的内容填充来自表133"陷阱128的通知DataDetails"（第814页）的信息。
+
+14.3.7 交换机外部端口上的P_Key不匹配
+
+P_Key不匹配发生在交换机外部端口上传入或传出数据包头部中的P_Key与该交换机外部端口的P_KeyTable中的任何条目不匹配时，如18.2.4节"数据包中继要求"（第1044页）所述。
+
+o14-6.1.2: 如果交换机管理端口的PortInfo:CapabilityMask.IsPKeySwitchExternalPortTrapSupported被设置，交换机管理端口上的SMA应按18.2.4节"数据包中继要求"（第1044页）监控每个交换机外部端口上的P_Key不匹配。
+
+o14-6.1.3: 如果交换机管理端口的PortInfo:CapabilityMask.IsPKeySwitchExternalPortTrapSupported和PortInfo:CapabilityMask.IsTrapSupported被设置，且按18.2.4节检测到P_Key不匹配，则SMA应向PortInfo:MasterSMLID指示的SM发送陷阱259。
+
+o14-6.1.4: 如果交换机管理端口的PortInfo:CapabilityMask.IsPKeySwitchExternalPortTrapSupported和PortInfo:CapabilityMask.IsNoticeSupported被设置，且检测到P_Key不匹配，则SMA应使用Notice:TrapNumber 259记录通知。
+
+14.3.8 传输密钥不匹配
+
+传输密钥不匹配发生在传入数据包头部中的密钥在数据包验证期间与目的QP的密钥不匹配时，如9.6节"数据包传输头部验证"（第269页）所述。
+
+C14-33: SMA应监控该端口上传输服务检测到的P_Key和Q_Key不匹配。
+
+C14-34: 如果发生P_Key或Q_Key不匹配，SMA应通过PortInfo属性的PortInfo:P_KeyViolations或PortInfo:Q_KeyViolations组件的内容报告当前计数。
+
+o14-7: 如果端口支持陷阱（PortInfo:CapabilityMask.IsTrapSupported），SMA应分别为P_Key和Q_Key不匹配向PortInfo:MasterSMLID指示的SM发送陷阱257或258。
+
+o14-8: 如果端口支持通知（PortInfo:CapabilityMask.IsNoticeSupported），SMA应使用Notice:TrapNumber 257或258分别为P_Key和Q_Key不匹配记录通知。
+
+14.3.9 M_Key不匹配
+
+SMA负责检查SMP头部中的M_Key。SMA将按14.2.4.1节"保护级别"（第807页）所述执行M_Key检查。如果检查失败且租约期倒计时尚未生效，SMA将按14.2.4.2节"租约期"（第807页）所述启动租约期倒计时。
+
+o14-9: 如果端口接收到检测到M_Key不匹配的SMP，且端口支持陷阱（PortInfo:CapabilityMask.IsTrapSupported），则该端口的SMA应向PortInfo:MasterSMLID指示的SM发送陷阱256。
+
+o14-10: 如果端口接收到检测到M_Key不匹配的SMP，且端口支持通知（PortInfo:CapabilityMask.IsNoticeSupported），则该端口的SMA应使用Notice:TrapNumber 256记录通知。
+
+陷阱或通知的内容填充来自表137"陷阱256的通知DataDetails"（第815页）的信息。
+
+14.3.10 链路层错误
+
+链路层按7.12节"错误检测和处理"（第219页）所述执行错误检测和恢复。SMA负责监控端口链路层检测到的本地链路完整性、过度缓冲区溢出和流控更新错误。
+
+o14-11: 当支持陷阱的端口（PortInfo:CapabilityMask.IsTrapSupported被设置）发生本地链路完整性错误时，端口的SMA应向PortInfo:MasterSMLID中包含的地址处的SM发送陷阱129；当发生过度缓冲区溢出错误时，应发送陷阱130；当发生流控更新错误时，应发送陷阱131。
+
+o14-12: 如果端口支持通知（PortInfo:CapabilityMask.IsNoticeSupported），当本地链路完整性、过度缓冲区溢出或流控更新计数器递增时，SMA应分别使用Notice:TrapNumber 129、130或131记录通知。
+
+14.3.11 更改CapabilityMask
+
+PortInfo:CapabilityMask组件为RO，因此不能由SM更改。但是，PortInfo:CapabilityMask可以在正常子网运行条件下由端节点上的实体在运行时修改。SMA负责监控和报告PortInfo:CapabilityMask的变化。
+
+o14-12.1.1: 如果端口支持陷阱（PortInfo:CapabilityMask.IsTrapSupported）且端口能够发送CapabilityMask陷阱（PortInfo:CapabilityMask.IsCapabilityMaskNoticeSupported位），则当PortInfo:CapabilityMask在运行时被修改时，SMA应向PortInfo:MasterSMLID指示的SM发送陷阱144。
+
+o14-12.1.2: 如果管理端口支持通知（PortInfo:CapabilityMask.IsNoticeSupported）且端口能够记录CapabilityMask通知（PortInfo:CapabilityMask.IsCapabilityMaskNoticeSupported），当PortInfo:CapabilityMask在运行时被修改时，SMA应使用Notice:TrapNumber 144记录通知。
+
+14.3.12 更改SystemImageGUID
+
+NodeInfo:SystemImageGUID组件为RO，因此不能由SM更改。但是，它可以在正常子网运行条件下由端节点上的实体在运行时修改。SMA负责监控和报告NodeInfo:SystemImageGUID的变化。
+
+o14-12.1.3: 如果端口支持陷阱和SystemImageGUID（由PortInfo:CapabilityMask.IsTrapSupported和PortInfo:CapabilityMask.IsSystemImageGUIDSupported指示），则当NodeInfo:SystemImageGUID在运行时被修改时，SMA应向PortInfo:MasterSMLID指示的SM发送陷阱145。
+
+o14-12.1.4: 如果管理端口支持通知和SystemImageGUID（由PortInfo:CapabilityMask.IsNoticeSupported和PortInfo:CapabilityMask.IsSystemImageGUIDSupported指示），则当NodeInfo:SystemImageGUID在运行时被修改时，SMA应使用Notice:TrapNumber 145记录通知。
+
+14.4 子网管理器
+
+子网上可能有一个或多个子网管理器在运行，如13.3.2节"必需的管理器和代理"（第716页）所述。特定节点上可能有多个SM，每个驻留在不同的子网上。
+
+C14-35: SM应始终与一个端口和一个子网关联。
+
+C14-35.1.1: 子网管理器（SM）应通过在其驻留的端口上设置PortInfo:CapabilityMask中的IsSM位来指示其在子网上的存在（见表145"PortInfo"第822页）。
+
+激活SM的机制超出了规范范围。修改IsSM位的能力由HCA的动词提供（见11.2.1.3节"修改HCA属性"第556页），其他方面超出规范范围。
+
+每个SM始终处于特定状态：Master、Standby、Discovering或Not-active。
+
+用于初始化子网的算法、响应子网变化而添加/删除路由的算法、从主SM到备用SM的故障转移机制，以及从主SM到备用SM的主权转移机制超出了规范范围。但是，本节中指定了可用于支持这些操作的机制。
+
+C14-36: SM在启动期间应符合图194"SMInfo状态转换"（第861页）中显示的状态机，并应成为主SM或备用SM。
+
+正确执行状态机确保子网上在任何时间只有一个主SM，且在启动后，SM成为子网上的备用或主。
+
+此外，状态机指定了在子网拓扑变化、数据包丢失、SM的添加/删除和子网合并期间如何维护单个主SM。
+
+14.4.1 SM状态机
+
+SM的行为以SM状态机的形式指定。本节首先定义SM使用的特定机制：SMInfo属性、SM可能交换的控制数据包、一组定时器和向上层（管理员）报告的异常条件。
+
+每个SM提供在表158"SMInfo"（第840页）中指定的SMInfo属性，从其驻留的端口导出。
+
+C14-37: 此合规声明已过时，已被C14-37.1.1替代。
+
+C14-37.1.1: SMInfo:Priority和SMInfo:SM_Key应仅通过超出本规范范围的带外机制配置。
+
+C14-37.1.2: SM应将提供给它的SMInfo:Priority（见C14-37.1.1）保存在非易失性存储器中。
+
+SMInfo属性中组件的内容决定了多SM子网中哪个SM成为Master：具有最高Priority和最低GUID的那个。
+
+每个备用SM应准备好在当前主SM失败（或断开连接）时成为Master。此外，当Master检测到另一个具有更高Priority（或相同Priority和更低GUID）的SM时（例如在两个子网合并期间），主权将被移交。移交仅在具有正确SM_Key的SM之间进行。
+
+在某些情况下，例如当备用SM的数量成为可扩展性障碍时，主SM可以强制其他SM变为Not-active。
+
+C14-38: 为了确保互操作性，每个SM应对SubnGet(SMInfo)或SubnSet(SMInfo)以SubnGetResp(SMInfo)响应。
+
+图194 SMInfo状态转换
+
+状态转换对应于下文中的事件编号。以下各节描述SM在每个状态中的行为以及导致状态变化的（外部驱动的）事件。
+
+14.4.1.1 控制数据包
+
+控制数据包可以使用包含SubnSet(SMInfo)的SMP在SM之间交换，其中MADHeader:AttributeModifier用于从表182"SM控制数据包"（第862页）中的以下操作之一中选择。SM不需要生成这些控制数据包，可以使用超出规范范围的机制来实现类似功能，但SM需要正确响应它们。
+
+表182 SM控制数据包
+MADHeader:AttributeModifier    描述
+1    HANDOVER: 用于启动将主权移交给更高优先级备用SM或Master的过程。
+2    ACKNOWLEDGE: 用于确认移交
+3    DISABLE: 用于禁用备用SM。
+4    STANDBY: 用于将Not-active SM返回到Standby。
+5    DISCOVER: 使备用SM进入Discovering。
+
+C14-38.1.1: 接收到请求无效状态转换的SubnSet(SMInfo)控制数据包的SM应忽略请求的操作并返回MADHeader:Status代码为7的SubnGetResp(SMInfo)。
+
+无效状态转换控制数据包包括MADHeader:AttributeModifier为1、3、4或5但不是由主SM发送的；或MADHeader:AttributeModifier为2但不是由备用SM发送的；或请求图194中不存在的状态转换的。
+
+14.4.1.2 Discovering状态
+
+DISCOVERING是初始状态。
+
+C14-39: 在启动时，SM应进入DISCOVERING状态。
+
+C14-40: 在DISCOVERING状态下，SM应执行重复的SubnGet(*)以查找子网上的所有节点和SM。
+
+14.4.2节"子网发现操作"（第867页）汇总了发现期间收集的许多属性。SM通常使用直接路由SMP来到达所有端节点。发现顺序是实现特定的，超出规范范围。
+
+C14-41.1.1: 处于DISCOVERING状态的SM如果发现另一个SM具有SMInfo:SMState = MASTER，或处于NOT-ACTIVE以外的状态且具有更高Priority（或相同Priority和更低GUID），则应让步并将其SMInfo:SMState更改为STANDBY。
+
+见图194，编号1。此时SM停止发现并开始作为备用SM运行。
+
+C14-42.1.1: 如果处于DISCOVERING状态的SM在完成发现过程后未找到Master或具有更高优先级（更低GUID）且处于NOT-ACTIVE以外状态的SM，则应通过将其SMInfo:State更改为MASTER来承担Master角色。
+
+C14-43: 主SM最初应向子网上所有节点发送SubnSet(PortInfo) SMP，其中PortInfo:MasterSMLID和PortInfo:MasterSMSL指定到自身的路径。
+
+见图194，编号2。
+
+C14-44: 如果SM发现它没有配置子网上CA、交换机或路由器所需的M_Key，它应通知上层（通过超出规范范围的接口）。
+
+14.4.1.3 Standby状态
+
+C14-45: 备用SM不应配置子网。
+
+C14-46: 每个备用SM应使用SubnGet(SMInfo) SMP轮询主SM，寻址到其PortInfo:MasterSMLID。只要备用SM确定Master是活的，它就保持在SMInfo:SMState = STANDBY。
+
+轮询之间的最小间隔由上层设置。实际间隔对于较低Priority的备用SM或子网上有较多备用SM时可能更长。
+
+C14-47: 如果备用SM在上层设置的重试次数内未收到指示ActCount有进展的SubnGetResp(SMInfo)，则它应断定Master不再存活（或不可访问），并应将其SMInfo:SMState改回DISCOVERING。
+
+见图194，编号3。
+
+C14-48: 如果备用SM收到DISCOVER数据包（即MADHeader:AttributeModifier设置为5的SubnSet(SMInfo)），则它应将其SMInfo:SMState更改为DISCOVERING。
+
+见图194，编号4。
+
+C14-49: 如果备用SM收到DISABLE数据包（即MADHeader:AttributeModifier设置为3的SubnSet(SMInfo)），则它应将其SMInfo:SMState更改为NOT-ACTIVE。
+
+见图194，编号5。
+
+C14-50: 如果备用SM收到HANDOVER控制数据包（即MADHeader:AttributeModifier设置为1的SubnSet(SMInfo)），它应返回SubnGetResp(SMInfo)。
+
+接管子网所需的步骤超出规范范围。但备用SM可以例如执行以下操作：
+1) 接收HANDOVER控制数据包的备用SM获取必要的拓扑信息。
+2) 备用SM应向子网上所有节点发送SubnSet(PortInfo)，其中MasterSMLID和MasterSMSL指定到自身的路径。
+3) 备用SM可以向当前主SM发送ACKNOWLEDGE控制数据包。
+4) 如果备用SM未收到SubnGetResp(SMInfo)，它应通知上层。
+5) 收到SubnGetResp(SMInfo)后，它通过将其SMInfo:State更改为MASTER来承担Master角色。见图194，编号6。
+
+14.4.1.4 Not-Active状态
+
+C14-51: 如果SM处于NOT-ACTIVE状态，它应通过将SMInfo:SMState设置为NOT-ACTIVE来指示。
+
+C14-52: 如果SM处于NOT-ACTIVE状态，它不应发送SubnSet()或SubnGet() SMP。
+
+C14-53: 如果SM处于NOT-ACTIVE状态，它应响应SubnSet(SMInfo)和SubnGet(SMInfo) SMP。
+
+C14-54.1.1: 如果SM处于NOT-ACTIVE状态且收到STANDBY数据包（即MADHeader:AttributeModifier设置为4的SubnSet(SMInfo)），它应将其状态更改为STANDBY。
+
+见图194，编号11。
+
+14.4.1.5 Master状态
+
+Master通过拓扑发现、LID验证和分配（如适用）、路径验证和计算等开始操作（如14.4.3节"初始化操作"第868页中指定）。
+
+C14-55: 只有主SM应配置子网节点。
+
+C14-57: 如果使用14.2.4.1节"保护级别"（第807页）中描述的M_Key保护机制，主SM应以能刷新子网上每个端口的租约期的速率扫描子网。
+
+14.4.6节"子网扫描"（第878页）描述了扫描活动。
+
+C14-58: Master应在每次执行管理操作或发出SMP时递增SMInfo.ActCount。
+
+C14-59: 如果在扫描期间Master检测到拓扑变化，则它应执行以下操作：
+• 如果变化是链路断开，则Master需要可能建立新路径并向受影响的节点发送新的MasterSMLID/SL。
+• 如果Master检测到新链路，则它使用（部分）直接路由SMP开始发现新链路之外的子网。
+
+C14-60.2.1: 如果主SM发现另一个具有较低优先级（或相同优先级和较高GUID）的主SM，它应确保自己是子网上最高优先级的（或相同优先级和较低GUID），如果是，则应等待另一个Master放弃其子网部分的控制。
+
+C14-61.1.1: 如果主SM发现一个处于NOT-ACTIVE以外状态的SM，具有更高优先级（或相同优先级和更低GUID），且具有适当的SM_Key；则它应完成发现或扫描以确定新子网部分中的最高优先级SM，并应将其子网部分的控制权让给该SM。
+
+可选的移交过程：
+• 它可以完成进行中的操作。
+• 它向更高优先级的SM发送HANDOVER数据包。
+• 它继续响应备用SM的轮询，直到收到更高优先级SM的ACKNOWLEDGE数据包。
+• 当它收到ACKNOWLEDGE数据包时，它将其SMInfo:SMState更改为STANDBY并返回SubnGetResp(SMInfo)。见图194，编号9。
+
+C14-61.2.1: 如果主SM确定更高优先级的主SM没有正确的SM_Key，则它不应放弃其子网部分的主权，也不应更改子网状态。
+
+C14-61.2.2: 如果主SM确定较低优先级的主SM未在供应商特定时间段内执行移交，则它不应更改子网状态。
+
+C14-61.2.3: 如果处于MASTER状态的SM收到HANDOVER控制数据包，它应返回SubnGetResp(SMInfo)。见图194，编号10。
+
+14.4.2 子网发现操作
+
+SM从属性中收集信息并记录以供稍后在子网配置期间使用。发现算法超出规范范围，但发现可能包括：
+• 使用定向路由数据包探测子网
+• 从持久存储加载拓扑数据库
+• 从持久存储加载的信息和通过探测子网节点获得的信息的组合
+
+发现期间，SM扫描14.2.5节"属性"（第809页）中描述的属性以获取包括但不限于以下信息：
+• 每个端口上的VL
+• 端口的MTU
+• 每个端口上的链路宽度
+• 每个端口上的链路速度
+• 物理拓扑、节点之间链路的连接性
+• P_Key表大小
+• GUID表大小
+• 各种功能的支持
+• 设备类型：交换机、CA或路由器
+• 上电诊断状态
+• 对于交换机：交换机线性转发或随机转发表的大小、组播转发表的支持和大小、可选VL仲裁表的存在、可选SL-to-VL映射表的存在
+
+14.4.3 初始化操作
+
+设置许多子网属性所需的算法和策略超出了规范范围。但是，有一组核心属性是SM负责设置以使子网正常运行的。
+
+C14-62.1.1: 主SM应初始化表183"初始化"（第868页）中指定的子网组件。
+
+表183 初始化（主要组件）
+组件                          描述
+PortInfo:LID                  SM应为子网上的每个端口分配单播LID地址。SM还应设置交换机的转发表。
+PortInfo:LMC                  SM应为子网上的每个CA和路由器端口分配LMC。
+PortInfo:GidPrefix            SM应基于路由器的存在分配子网前缀。
+PortInfo:OperationalVL        SM应初始化CA、交换机和路由器的VL表。
+PortInfo:NeighborMTU          SM应初始化CA、交换机和路由器的端口MTU。
+PortInfo:SubnetTimeOut        SM应通过初始化所有端口中的PortInfo.SubnetTimeOut组件来设置所有节点的最大陷阱生成速率。
+PortInfo:MasterSMLID          SM应在子网上每个端口的PortInfo:MasterSMLID中存储其驻留端口的LID。
+PortInfo:MasterSMSL           SM应在子网上每个端口的PortInfo:MasterSMSL中存储使用该LID向SM发送非SMP消息所需的SL。
+PortInfo:M_Key                SM可以为子网上的每个端口初始化PortInfo:M_Key。
+PortInfo:M_KeyProtectBits     SM可以为子网上的每个端口初始化PortInfo:M_KeyProtectBits。
+PortInfo:M_KeyLeasePeriod     SM可以为子网上的每个端口初始化PortInfo:M_KeyLeasePeriod。
+PortInfo:M_KeyViolations      SM应清除子网上所有端口的PortInfo:M_KeyViolations组件。
+PortInfo:P_KeyViolations      SM应清除子网上所有端口的PortInfo:P_KeyViolations组件。
+PortInfo:Q_KeyViolations      SM应清除子网上所有端口的PortInfo:Q_KeyViolations组件。
+PortInfo:VLStallCount         SM应设置PortInfo:VLStallCount值。
+PortInfo:HOQLife              SM应设置PortInfo:HOQLife值。
+PortInfo:VLHighLimit          SM应设置高优先级限制。
+GUIDInfo                      SM可以分配GUID给端口以形成GID。
+SwitchInfo:LinearFDBTop       在支持线性转发表的交换机上，SM将编程使用的最高LID到端口映射。
+SwitchInfo:DefaultPort        在支持随机转发表的交换机上，SM应设置默认端口。
+SwitchInfo:DefaultMulticastPrimaryPort    SM应设置DefaultMulticastPrimaryPort。
+SwitchInfo:DefaultMulticastNotPrimaryPort SM应设置DefaultMulticastNotPrimaryPort。
+SwitchInfo:LifeTimeValue      SM应设置LifeTimeValue。
+VLArbitrationTable            VL仲裁应由SM为每个CA、交换机和路由器的输出链路设置。
+SLtoVLmappingTable            SM将初始化SL-to-VL映射表。SM应检查SLtoVLmappingTable的存在并初始化（如果存在）。
+P_KeyTable                    SM可以通过设置端口的P_KeyTable属性中的条目来初始化P_Key表。SM应确保每个节点中的P_KeyTable条目之一包含值0xFFFF或0x7FFF。
+LinearForwardingTable         单播转发表将由SM根据路由策略决策和交换机功能设置。
+RandomForwardingTable         如果交换机支持随机转发表，SM应设置LID/LMC范围到端口映射。
+MulticastForwardingTable      如果交换机支持组播转发表，SM可以设置LID到多端口映射。
+
+C14-62.1.2: 在建立交换机转发表和SL到VL映射的内容时，子网管理器应确保不存在循环流控依赖。
+
+C14-62.1.3: SM应确保在任何端口以任何SL和DLID组合进入子网的数据包都不会导致子网死锁。
+
+C14-62.1.4: 从子网内的每个端口，SM应提供到每个其他端口的至少一条可逆路径。见13.5.4节"响应生成和可逆路径"（第768页）。
+
+14.4.4 节点重新初始化
+
+IBA网络中的任何类型的节点都可能需要重新初始化，即重新加载SM在子网初始化过程中设置的属性。这可能由于微代码、软件和硬件的各种故障而发生。
+
+可能发生以下类型的不同错误：
+1) 管理程序故障 - 操作系统、虚拟机监控程序或交换机/路由器微代码的故障。
+2) 通道适配器故障 - 动词未按预期执行，但管理程序无故障。
+3) 端口故障 - SMA对SM无响应。
+4) 链路因无法透明纠正的错误而断开（如物理通道丢失）。
+
+处理所有此类情况从SM检测到端口"down"开始。SM检测方式可以是子网扫描或接收陷阱128。
+
+后续操作取决于SM和端口是否都实现了重新初始化选项（由SA的ClassPortInfo:CapabilityMask.IsReinitSupported和端口的PortInfo:CapabilityMask.IsReinitSupported指示）。
+
+如果SM不支持重新初始化，则采取的操作是供应商特定的。
+
+如果SM和端口都支持重新初始化，SM通过检查PortInfo:InitType组件确定所需的初始化类型。
+
+o14-12.1.5: 如果SM支持重新初始化而端口不支持，则SM应像端口支持重新初始化并将所有PortInfo:InitType位设置为0那样重新初始化端口；并应将所有InitTypeReply位设置为0。
+
+o14-12.1.6至o14-12.1.9: 这些合规声明规定了SM在处理InitType位（NoLoad、PreserveContent、PreservePresence）时的行为。
+
+表184 PortInfo:InitType解释
+描述了InitType位的所有可能组合及其解释，包括NoLoad、PreserveContent、PreservePresence和DoNotResuscitate位的各种组合。
+
+14.4.5 端口状态转换
+
+当设备通电时，其端口尝试按InfiniBand架构规范卷2和6.2节中描述的步骤达到操作状态。
+
+C14-63: SM应在其驻留端口的PortInfo:PortState处于initialize状态时确定子网已可运行。
+
+SM可以在端口处于initialize状态时访问远程CA、交换机和路由器的管理实体。
+
+SM可以将端口的状态更改为active、armed、initialize或down。
+
+SM可以在PortInfo:PortState处于initialize状态时执行大多数端口和设备配置活动。但是，所有控制和配置选项在armed状态和active状态下也可用。
+
+SM可以通过以下方式重置端口相关状态：
+1) 将PortInfo:LinkDownDefaultState设置为polling状态
+2) 将PortInfo:PortState设置为down状态。
+
+14.4.6 子网扫描
+
+C14-64: 子网启动运行后，SM应定期收集有关拓扑变化、PortInfo:CapabilityMask变化和节点报告的通知的信息。
+
+这被称为扫描子网。子网扫描的频率在此架构中未定义，因为它会因拓扑和其他实现考虑而变化。
+
+SM通过检查子网中节点的端口状态来检测拓扑变化。为加速端口状态变化的检测，交换机支持SM可以检查的SwitchInfo:PortStateChange组件。
+
+14.4.7 认证
+
+在初始化SMP期间，SM可以在SMP的MADHeader:M_Key字段中填入与目的端口中存储的M_Key匹配的值（如果它期望目的管理实体检查它）。
+
+C14-65: SM不应检查存储在SubnGetResp(*)中的MADHeader:M_Key。
+
+C14-66: 如果SM接收到经验证的包含SubnSet(SMInfo)或SubnGet(SMInfo)的SMP且PortInfo:M_Key组件为零，则SM应生成SubnGetResp。
+
+C14-67: 如果SM接收到经验证的包含SubnSet(SMInfo)或SubnGet(SMInfo)的SMP，且PortInfo:M_Key组件非零，且M_Key匹配成功，则SM应生成SubnGetResp()。否则SubnSet(SMInfo)或SubnGet(SMInfo)将被静默丢弃。
+
+C14-68: 当主SM接收到包含SubnTrap()的SMP时，它不应检查MADHeader:M_Key字段是否与接收SMP的端口的PortInfo:M_Key匹配。
+
+SMInfo:SM_Key由主SM用于认证子网上的其他备用SM和主SM（在子网合并的情况下）。密钥如何使用是实现特定的。
+
+14.4.8 SM禁用机制
+
+C14-69: 如果SM可以驻留在端口上，应提供一个供应商定义的带外机制，当启动时将禁用从该端口运行SM的能力，且该机制的状态应在PortInfo:CapabilityMask.IsSMdisabled位中指示。
+
+C14-70: 当PortInfo:CapabilityMask.IsSMdisabled位被启动时，端口行为应为：
+• 发送到该端口的SubnSet(SMInfo)或SubnGet(SMInfo)应被丢弃
+• SubnSet(*)或SubnGet(*)不应从该端口发送
+• 该端口的PortInfo:CapabilityMask.IsSM位不应被设置。
+
+C14-71: 当PortInfo:CapabilityMask.IsSMdisabled未被启动时，端口行为应为：
+• 发送到该端口的SubnSet(SMInfo)或SubnGet(SMInfo)将在适当实体可操作时转发给管理实体
+• SubnSet(*)或SubnGet(*)可由管理实体从端口发送
+• PortInfo:CapabilityMask.IsSM位由该端口后面的管理实体控制。
+
+C14-72: 端口上PortInfo:CapabilityMask.IsSMdisabled的状态应可在端口运行期间随时更改。
+
+14.4.9 进入和退出服务陷阱
+
+陷阱号64和65指示端口何时进入或退出服务（见表131"陷阱"第812页），永远不在子网上发送的SubnTrap() SMP中使用；相应的事件在主SM内部生成，因此不必通过SubnTrap()消息向SM发出信号。这些陷阱号仅用于允许SM通过子网管理器（见15.4.3节"事件转发子系统"第923页）使用SubnAdmReport() GMP向端节点报告事件。
+
+C14-72.1.1: 当端口A变得从已订阅陷阱64的端口B可达时，SM应使SM通过陷阱号64发送SubnAdmReport()给B，关联的通知属性DataDetails提供A的GID。
+
+C14-72.1.2: 当端口A不再从已订阅陷阱65的端口B可达时，SM应使SA通过陷阱号65发送SubnAdmReport()给B。
+
+14.4.10 组播组创建/删除陷阱
+
+陷阱号66和67指示组播组何时被创建或删除，这些事件由SA在创建或删除组播组时生成。这些陷阱号用于通过SA使用SubnAdmReport() GMP报告这些事件。
+
+o14-12.1.10: 如果SA支持UD组播，则如果端口已订阅特定或通配MGID的陷阱66，当创建具有匹配MGID的组播组时，SA应向该端口发送SubnAdmReport()。
+
+o14-12.1.11: 如果SA支持UD组播，则如果端口已订阅特定或通配MGID的陷阱67，当具有匹配MGID的组播组的最后一个接收成员离开该组时，SA应向该端口发送SubnAdmReport()。
+
+14.4.11 客户端重新注册
+
+客户端重新注册允许子网管理器请求客户端重新注册先前从此端口请求的所有订阅。SM可以在任何时候对支持此选项的任何端口请求此操作。SM这样做的原因可能是SM遭受故障，因此丢失了自己的此类订阅记录。
+
+SM类使用PortInfo属性来影响客户端重新注册。端口通过设置PortInfo:CapabilityMask.IsClientReregistrationSupported = 1来指示它支持SM类的客户端重新注册。
+
+o14-12.2.1: 如果端口支持客户端重新注册（PortInfo.IsClientReregistrationSupported = 1），SMA应对PortInfo:ClientReregister=1的SubnSet(PortInfo)做如下响应：
+• 应返回PortInfo:ClientReregister=1的SubnGetResp(PortInfo)
+• 应生成类型为Client Reregistration的异步非关联事件（见11.6.3.3节"非关联异步事件"第640页）。
+
+o14-12.2.2: 合规声明o14-12.2.1是SMA应返回PortInfo中ClientReregister=1的唯一情况；在所有其他情况下，它应为0。

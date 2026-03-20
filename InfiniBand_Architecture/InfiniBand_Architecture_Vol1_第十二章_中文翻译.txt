@@ -1,0 +1,1143 @@
+第十二章：通信管理
+
+12.1 概述
+
+图 128 通信管理实体
+
+通信管理涵盖了用于建立、维护和释放 IB 可靠连接（Reliable Connection）、不可靠连接（Unreliable Connection）和可靠数据报（Reliable Datagram）传输服务类型通道的协议和机制。Service ID 解析协议（参见第 12.11 节）使不可靠数据报服务的用户能够定位支持其所需服务的队列对。
+
+连接通过通信管理器（CM）之间描述的协议，在每个系统上的队列对之外进行管理，而非使用用于连接本身的队列对。（参见图 128）各 CM 使用管理数据报（MAD）进行通信，通常通过每个系统上的通用服务接口（GSI）。本文档定义了 CM 的外部行为，但内部接口和实现不在 InfiniBand 架构规范的范围之内。示例旨在帮助理解，而非规定实现方式。
+
+在创建时，QP 和 EEC 尚未准备好进行通信。必须修改 QP/EEC 的属性（参见第 11.2.4.2 节和第 11.2.7.2 节）以支持所需的通信特性和目标。
+
+[图 128：展示了通信管理实体之间的关系。系统 A 包含 GSI、CM、QP A1/A2/A3、APP A1/A2、EEC A；系统 B 包含 GSI（重定向 CM）、GSI、CM、CM'、QP B1/B2/B3/B4、APP B1/B2、EEC B。已连接通道和可靠数据报通道连接两个系统。]
+
+由于其性质，原始数据包 QP 不需要也不受 IB 通信管理的支持。
+
+对参与 CM 的要求并不相同。发起方 CM 负责收集或计算建立连接所需的大部分信息。大部分原始信息可从子网管理（Subnet Administration）获得，但根据通道的应用场景，可能需要进行一些调整。
+
+CM 必须在连接的生命周期内维护一定量的信息。详细信息可在第 12.9.9 节中找到。
+
+未通过图 169 所示 GMP 检查算法的 CM MAD 应被 CM 静默丢弃，除非在后续章节中特别说明。
+
+CM 遵循第 13.5.2 节"GSI 重定向"中记录的标准管理模型来处理 CM 请求的重定向，例外情况是包含 ClassPortInfo 的 CM 响应不是 GetResp() 方法，而是 Send() 方法。（参见第 13.4.5 节"管理类方法"了解 GetResp() 和 Send() 方法的描述。参见第 13.4.8.1 节"ClassPortInfo"了解 ClassPortInfo 内部的重定向信息。）包含 ClassPortInfo 的 CM 消息有 REJ（参见第 12.6.7 节"REJ - 拒绝"）、APR（参见第 12.8.2 节"APR - 备用路径响应"）和 SIDR_REP（参见第 12.11.2 节"SIDR_REP - Service ID 解析响应"）。应当注意，被重定向的请求者随后向 GSI 发送后续请求并不构成错误。但这样做效率不高，因为请求者很可能会被再次重定向。
+
+C12-0.1.1：本版本 CM 协议中定义的所有消息，其 MAD 头部中的 ClassVersion 字段应设置为 2。IBTA 先前发布的 CM 协议 1.0a 版本中定义的所有消息，其 ClassVersion 字段应设置为 1。
+
+如果使用 ClassVersion 2 的 CM 实现向仅支持 ClassVersion 1 的 CM 实现发送请求（例如 REQ 消息），运行 ClassVersion 1 的 CM 将无法回复，请求将超时。如果使用 ClassVersion 2 的 CM 实现希望其请求被使用 ClassVersion 1 的 CM 实现成功处理，则必须使用 ClassVersion 1 的格式和协议向该 CM 发送其请求 MAD（及其他 MAD）。
+
+使用 ClassVersion 2 的 CM 可以通过向远端 CM 执行 Get(ClassPortInfo) 来明确判定是否需要使用 ClassVersion 1 与远端 CM 通信。Get(ClassPortInfo) MAD 的 MAD 头部中使用的 ClassVersion 必须设置为 1。然后可以检查返回的 GetResp(ClassPortInfo) MAD 中的 ClassVersion 字段，以确定远端 CM 是支持 ClassVersion 1，还是同时支持 ClassVersion 1 和 ClassVersion 2。详情参见第 13.4.8.1 节"ClassPortInfo"（第 734 页）。
+
+12.2 建立
+
+图 129 连接建立示例序列
+
+连接建立协议支持两种模型：主动/被动（客户端/服务器）和主动/主动（对等）。
+
+如图 128 所示，每个系统上的 CM 代表其客户端建立连接。CM 与其客户端之间的交互不在本规范的范围之内。
+
+在主动/被动模型中（如图 129 所示），B 的 CM 代表一个服务器（例如服务器进程或 I/O 控制器）等待连接请求，该服务器等待（被动地）由客户端建立连接。潜在客户端（主动方）的 CM（A）将指定所需服务的 ServiceID 放入开始连接建立序列的请求（REQ）消息中。ServiceID 允许被动端 CM（B）将请求与适当的服务器实体关联。如果 REQ 被接受，B 的 CM 将在响应（REP）MAD 中返回队列对编号（QPN）（以及端到端上下文编号（EECN），用于 RD 服务）。QP 和 EEC 是预分配的还是响应请求而分配的，属于 IBA 规范范围之外的实现考虑。
+
+[图 129：服务器/客户端连接建立序列。客户端 A 发送 REQ，服务器 B 响应 REP，A 发送 RTU（Ready To Use）。B 可在收到 REQ 后发送，A 可在发送 RTU 后发送。]
+
+在主动/主动模型中，两个实体都以主动方开始（即都发送 REQ），但其中一个最终承担被动角色来建立连接。被动实体的选择在第 12.10.4 节中描述。
+
+InfiniBand 架构支持在同一 CA 上不同 QP 之间建立环回连接。用于建立环回连接的具体机制取决于实现。（有多种机制可用于建立环回连接，包括使用连接建立协议，或使用修改队列对 Verb 直接设置必要状态。）
+
+12.2.1 静默时间
+
+一旦 CM 初始化完成（通常发生在重启之后），CM 应注意在"静默时间"之后才建立任何连接。静默时间是从网络中移除所有与 CM 在其前一化身中建立的连接相关的数据包所需的时间间隔。如果 CM 不注意在静默时间内避免建立连接，则由于前一连接实例的数据包被新连接实例成功接收，可能会发生未报告的数据损坏。
+
+在最坏情况下，与连接相关的数据包可以在网络中活跃的时间为 2 * PortInfo:SubnetTimeout + Target ACK Delay。（详情参见第 14.2.5.6 节"PortInfo"了解 PortInfo:SubnetTimeout，以及第 12.7.33 节了解 Target ACK Delay。）这是 CM 在初始化后建立新连接之前必须等待的最短安全静默时间。CM 用于等待静默时间的具体机制不在本规范的范围之内。可能的机制包括：
+
+• 在 CM 初始化后加载一个可调参数来告诉 CM 需要等待多长时间。
+• 让 CM 在运行时将观察到的最大 PortInfo:SubnetTimeout 和最大 Target ACK Delay 的信息存储在非易失性存储中，并在下一化身中 CM 初始化后从非易失性存储中检索该信息。
+
+12.3 自动路径迁移
+
+连接建立消息指定了支持（可选的）备用端点对以支持自动路径迁移（APM）所需的信息。APM 在第 17.2.8.1 节中描述，支持机制在第 10.4 节中描述。不支持 APM 的通道适配器可以忽略备用地址信息。
+
+12.4 释放
+
+连接通过交换断开请求（DREQ）和断开回复（DREP）MAD 来释放。通信实体可能希望在发起断开序列之前实现其协议的有序关闭。连接释放后，CM 应使每个涉及的 QP/EEC 被置于 TimeWait 状态，如第 12.9.8.4 节所定义。
+
+CM 应维护足够的连接状态信息，以检测尝试在未从与本地 QP/EEC 的连接中释放的远端 QP/EEC 上发起连接，或该远端 QP/EEC 处于 TimeWait 状态的情况。如果远端 CM 已断开连接并发送了 DREQ，但本地 CM 未收到 DREQ，则可能发生这种事件。如果本地 CM 收到的 REQ 包含其认为与本地 QP/EEC 已连接的 QPN（或在 REQ:RDC Exists 未设置时的 EECN），本地 CM 应按照第 12.9.8.3 节中的定义行事。
+
+12.4.1 过时连接
+
+当只有一端拥有连接信息时，称 QP/EEC 具有过时连接。过时连接可能由以下情况产生：远端 CM 已断开连接并发送了 DREQ，但 DREQ 从未被本地 CM 收到。或者，远端 CM 可能因其节点崩溃并重启而丢失了所有过去连接的记录，而本地 CM 未意识到远端节点的重启，因此未清理过时连接。
+
+12.5 服务类型
+
+12.5.1 支持的协议
+
+以下章节包含消息描述和状态图，指定这些消息如何交换。这些消息用于以下目的：
+
+• 支持 RC 和 UC 服务类型的连接建立。
+• 支持 RD 服务的端到端上下文建立。
+
+图 128 说明了以下关系。
+
+12.5.2 已连接服务
+
+通过端 CM 之间达成协议，为可靠连接（RC）和不可靠连接（UC）服务类型建立通道。
+
+12.5.3 不可靠数据报服务
+
+不可靠数据报（UD）服务允许向任何目的地发送消息，尽管不保证目的地将接收或接受该消息。Service ID 解析功能（第 12.11 节）可用于确定适当的目标 QP。
+
+12.5.4 可靠数据报
+
+可靠数据报（RD）服务允许多个队列对通过单个 RD 通道（由一对 EE 上下文定义）进行通信。建立 RD 通道时，在每一端指定一个 QP。一对使用这些 QP 的应用程序如果希望在该 RDC 上使用额外的 QP，则不需要使用 CM 来关联那些 QP。可以通过原始 QP 发送应用程序特定的消息来通知另一端新 QP 的 QPN。
+
+除非另有规定，RD 通信请求意味着创建新的 RDC。在 REQ 消息中设置 RDC Exists 字段允许共享指定的 RDC。（参见第 12.6.5 节）当 RDC 被共享时，无论通信请求的结果如何，组成通道的 EE 上下文的状态不得被改变。在 RDC 建立之前（即在组成 RDC 的 EE 上下文上成功完成 CM 协议之前），不得共享 RDC，也不得在 RD QP 上共享 RDC。
+
+12.6 通信管理消息
+
+以下章节描述了用于支持 IBA 所支持的通信建立场景的消息集：
+a) 主动客户端到被动服务器
+b) 主动客户端到主动客户端
+c) 主动客户端到被动服务器（通过第三方重定向器）
+
+12.6.1 必需消息
+
+所有 IBA 主机和所有支持 RC、UC 或 RD 服务类型的 IBA 目标应支持以下消息：
+
+• 通信请求（REQ）（第 12.6.5 节）
+• 消息接收确认（MRA）（第 12.6.6 节）——所有 IBA 主机和目标必须能够接收和处理 MRA，但发送 MRA 的能力是可选的。
+• 拒绝（REJ）（第 12.6.7 节）
+• 通信请求回复（REP）（第 12.6.8 节）
+• 就绪使用（RTU）（第 12.6.9 节）
+• 通信释放请求（DREQ）（第 12.6.10 节）
+• 通信释放请求回复（DREP）（第 12.6.11 节）
+
+C12-1：支持可靠连接、不可靠连接或可靠数据报通道的 CA 应支持使用 CM 协议进行其建立。
+C12-2：对于其支持的状态和消息，CM 应遵守第 12.9.7 节和第 12.9.8 节中定义的 CM 协议。
+C12-3：CM 消息内容应符合第 12.7 节中的字段描述。
+C12-4：CM 应支持按照第 12.6.7 节发送 REJ 消息，并应支持接收 REJ 消息。
+C12-5：CM 在收到 MRA 消息后，应按照第 12.9.8.5 节的规定行事。
+o12-1：如果 CM 发送 REQ 消息，应按照第 12.6.5 节的规定执行。
+o12-2：如果 CM 发送 MRA 消息，应按照第 12.6.6 节的规定执行。
+o12-3：如果 CM 发送 REP 消息，应按照第 12.6.8 节的规定执行。
+o12-4：如果 CM 发送 RTU 消息，应按照第 12.6.9 节的规定执行。
+o12-5：如果 CM 发送 DREQ 消息，应按照第 12.6.10 节的规定执行。
+o12-6：如果 CM 发送 DREP 消息，应按照第 12.6.11 节的规定执行。
+o12-7：如果 CM 发起连接请求（主动角色），它应支持发送 REQ、REJ、RTU、DREQ 和 DREP 消息，以及响应 REP、REJ、DREQ 和 DREP 消息。
+o12-8：如果 CM 接受连接请求（被动角色），它应支持响应 REQ、REJ、RTU 和 DREQ 消息，以及发送 REP、REJ 和 DREP 消息。
+o12-9：如果 CM 发送 DREQ 消息，它应能够处理 DREP 消息。
+
+12.6.2 有条件必需消息
+
+如果在通道适配器上提供非管理服务且不在固定 QPN 上，则需要支持这些消息。管理服务包括通过子网管理数据包（参见第 14.2 节"子网管理类"）或通过通用管理数据包（参见第 16 章"通用服务"）提供的服务。
+
+• Service ID 解析请求（SIDR_REQ）（第 12.11.1 节）
+• Service ID 解析响应（SIDR_REP）（第 12.11.2 节）
+
+o12-10：如果 CM 发送 SIDR_REQ 消息，必须按照第 12.11.1 节的规定执行。
+o12-11：如果 CM 发送 SIDR_REP 消息，必须按照第 12.11.2 节的规定执行。
+o12-12：如果 CA 使用 UD 服务类型在非固定 QPN 上提供服务（子网管理和通用服务除外），其 CM 必须支持按照第 12.11 节的规定接收、处理和回复 SIDR_REQ 消息。
+
+12.6.3 可选消息
+
+对这些消息的支持是可选的：
+
+• 加载备用路径（LAP）（第 12.8.1 节）
+• 备用路径响应（APR）（第 12.8.2 节）
+
+o12-13：如果 CM 接受 REQ 消息并同意执行自动路径迁移，它应支持按照第 12.8 节的规定接收、处理和回复 LAP 消息。
+o12-14：如果 CM 发送带有备用端口/路径信息的 REQ 消息，它应支持按照第 12.8 节的规定发送 LAP 消息，并应支持接收和处理 APR 消息。
+
+12.6.4 消息用途
+
+已连接传输服务类型要求在连接两端建立、维护和释放状态信息。消费者可以使用本节中描述的消息来实现该目的。
+
+根据定义，不可靠数据报通信不需要建立、维护或释放任何连接状态。然而，通信服务被提供以允许基于特定 Service ID 关联本地和远端 QP。（参见第 12.11 节）
+
+可靠数据报通信要求在 CA 之间创建、维护和释放可靠数据报通道。
+
+每个管理数据报消息中包含的通信管理信息如下所述。MAD 头部格式在第 16.7.1 节"MAD 格式"（第 1011 页）中定义。
+
+C12-5.1.1：除非在后续章节中明确另有说明，否则所有 CM MAD 的 MAD 头部中的"Status"字段应设置为 0。
+
+C12-5.1.2：CM 协议中属于同一序列的所有消息，应将相同的值放入其 MAD 头部的 TransactionID 字段。选择的值应满足第 13.4.6.4 节"TransactionID 用法"中记录的唯一性属性。
+
+CM 协议中有四个消息序列：
+• 建立通信：REQ、REP、MRA（作为对 REQ 或 REP 的响应发送）、REJ 和 RTU
+• 加载备用路径：LAP、MRA（作为对 LAP 的响应发送）和 APR
+• 连接释放：DREQ 和 DREP
+• Service ID 解析：SIDR_REQ 和 SIDR_REP
+
+C12-5.1.3：CM 协议生成的所有响应应遵循第 13.5.4 节"响应生成和可逆路径"中列举的响应生成规则。
+
+CM 协议中除以下消息外的所有消息均被视为响应：
+• REQ
+• LAP
+• DREQ
+• SIDR_REQ
+• 当主动端从 Timeout 或 REP Wait 状态作为 CM 协议超时结果发送时的 REJ
+
+CM 协议中的所有消息都可以包含私有数据。由于 CM 协议利用不可靠数据报服务来发送其消息，因此应当指出，CM 协议消息交换中最终消息的成功接收无法得到保证。因此，消费者不能依赖于能够在消息交换的最终消息的私有数据中成功传达信息。CM 协议中的最终消息有：
+• REJ
+• RTU
+• APR
+• DREP
+• SIDR_REP
+
+下面定义的消息用于建立连接和端到端上下文建立。消息定义是这两个目的所需字段的并集，因此消息中有些字段对连接建立有用但对端到端上下文建立无用，反之亦然。这样做是为了减少协议中消息类型的总数。对于消息中的每个字段，都会注明该字段是用于支持连接建立还是端到端上下文建立（或两者都有）。
+
+12.6.5 REQ - 通信请求
+
+REQ 用于发起通信建立序列。发起者（REQ 发送方）提供其将用于通道本端的端口地址（GID 和/或 LID）和队列对编号。对于可靠数据报通道建立，还包含 EE 上下文编号。
+
+发起者负责提议目标（REQ 接收方）用于通道的端口地址（主要和可选的备用）。基于这些端口地址定义的路径，发起者提供超时信息和目标用于其发起的任何消息的服务级别。从发起者到目标的 SL 不需要与从目标到发起者的 SL 相同，但 REQ 消息中包含的 SL 是发起者希望目标使用的。路径信息可从子网管理获得（参见第 15.2.5.16 节"PathRecord"）。
+
+对于通过已存在的可靠数据报通道进行服务解析和 QP 关联，REQ:RDC Exists 必须被设置。当 REQ:RDC Exists 被设置时，REQ 的发送方或接收方都不应更改已存在的可靠数据报通道，因此 REQ 消息中的许多字段在这种情况下不使用。这些字段在下表中注明。所有此类未使用的字段应由发送方设置为 0，并由接收方忽略。此外，当 REQ:RDC Exists 被设置时，Primary Remote/Local Port GID/LID 字段的用途不是标识请求者希望建立通道的位置——通道已经建立——而是标识现有通道运行在哪对 CA 之间。
+
+表 99 REQ 消息内容
+
+字段 | 描述 | 用途 | 字节[位]偏移 | 长度（位） | 值
+---|---|---|---|---|---
+Local Communication ID | 参见第 12.7.1 节 | C, EE | 0 | 32 |
+（保留）| | | 4 | 32 |
+ServiceID | 参见第 12.7.3 节 | C, EE | 8 | 64 |
+Local CA GUID | 参见第 12.7.9 节 | C, EE | 16 | 64 |
+（保留）| | | 24 | 32 |
+Local Q_Key | 参见第 12.7.13 节 | EE | 28 | 32 |
+Local QPN | 参见第 12.7.12 节 | C, EE | 32 | 24 |
+Responder Resources | 参见第 12.7.29 节 | C, EE | 35 | 8 | RDC 存在时为 0
+Local EECN | 参见第 12.7.14 节 | EE | 36 | 24 |
+Initiator Depth | 参见第 12.7.30 节 | C, EE | 39 | 8 | RDC 存在时为 0
+Remote EECN | 参见第 12.7.15 节 | EE | 40 | 24 |
+Remote CM Response Timeout | 参见第 12.7.4 节 | C, EE | 43 | 5 |
+Transport Service Type | 参见第 12.7.6 节 | C, EE | 43[5] | 2 |
+End-to-End Flow Control | 参见第 12.7.26 节 | C | 43[7] | 1 | RDC 存在时为 0
+Starting PSN | 参见第 12.7.31 节 | C, EE | 44 | 24 | RDC 存在时为 0
+Local CM Response Timeout | 参见第 12.7.5 节 | C, EE | 47 | 5 |
+Retry Count | 参见第 12.7.38 节 | C, EE | 47[5] | 3 | RDC 存在时为 0
+Partition Key | 参见第 12.7.24 节 | C, EE | 48 | 16 | RDC 存在时为 0
+Path Packet Payload MTU | 参见第 12.7.28 节 | C, EE | 50 | 4 | RDC 存在时为 0
+RDC Exists | RDC 是否已存在 | EE | 50[4] | 1 | RDC 存在时为 1，不存在时为 0
+RNR Retry Count | 参见第 12.7.39 节 | C, EE | 50[5] | 3 | RDC 存在时为 0
+Max CM Retries | 参见第 12.7.27 节 | C, EE | 51 | 4 |
+SRQ | | | 51[4] | 1 | SRQ 存在时为 1，不存在时为 0
+（保留）| | | 51[5] | 3 |
+Primary Local Port LID | 参见第 12.7.11 节 | C, EE | 52 | 16 |
+Primary Remote Port LID | 参见第 12.7.21 节 | C, EE | 54 | 16 |
+Primary Local Port GID | 参见第 12.7.10 节 | C, EE | 56 | 128 |
+Primary Remote Port GID | 参见第 12.7.20 节 | C, EE | 72 | 128 |
+Primary Flow Label | 参见第 12.7.18 节 | C, EE | 88 | 20 | RDC 存在时为 0
+（保留）| | | 90[4] | 6 |
+Primary Packet Rate | 参见第 12.7.25 节 | C, EE | 91[2] | 6 | RDC 存在时为 0
+Primary Traffic Class | 参见第 12.7.17 节 | C, EE | 92 | 8 | RDC 存在时为 0
+Primary Hop Limit | 参见第 12.7.19 节 | C, EE | 93 | 8 | RDC 存在时为 0
+Primary SL | 参见第 12.7.16 节 | C, EE | 94 | 4 | RDC 存在时为 0
+Primary Subnet Local | 参见第 12.7.7 节 | C, EE | 94[4] | 1 | RDC 存在时为 0
+（保留）| | | 94[5] | 3 |
+Primary Local ACK Timeout | 参见第 12.7.34 节 | C, EE | 95 | 5 | RDC 存在时为 0
+（保留）| | | 95[5] | 3 |
+Alternate Local Port LID | 参见第 12.7.11 节 | C, EE | 96 | 16 | RDC 存在时为 0
+Alternate Remote Port LID | 参见第 12.7.23 节 | C, EE | 98 | 16 | RDC 存在时为 0
+Alternate Local Port GID | 参见第 12.7.10 节 | C, EE | 100 | 128 | RDC 存在时为 0
+Alternate Remote Port GID | 参见第 12.7.22 节 | C, EE | 116 | 128 | RDC 存在时为 0
+Alternate Flow Label | 参见第 12.7.18 节 | C, EE | 132 | 20 | RDC 存在时为 0
+（保留）| | | 134[4] | 6 |
+Alternate Packet Rate | 参见第 12.7.25 节 | C, EE | 135[2] | 6 | RDC 存在时为 0
+Alternate Traffic Class | 参见第 12.7.17 节 | C, EE | 136 | 8 | RDC 存在时为 0
+Alternate Hop Limit | 参见第 12.7.19 节 | C, EE | 137 | 8 | RDC 存在时为 0
+Alternate SL | 参见第 12.7.16 节 | C, EE | 138 | 4 | RDC 存在时为 0
+Alternate Subnet Local | 参见第 12.7.7 节 | C, EE | 138[4] | 1 | RDC 存在时为 0
+（保留）| | | 138[5] | 3 |
+Alternate Local ACK Timeout | 参见第 12.7.34 节 | C, EE | 139 | 5 | RDC 存在时为 0
+（保留）| | | 139[5] | 3 |
+PrivateData | 参见第 12.7.35 节 | C, EE | 140 | 736 |
+
+12.6.6 MRA - 消息接收确认
+
+MRA 在 REQ 消息的接收方预计无法在 REQ:Remote CM Response Timeout 指定的时间内响应时作为对 REQ 消息的响应发送；或在 LAP 消息的接收方预计无法在 LAP:Remote CM Response Timeout 指定的时间内响应时作为对 LAP 消息的响应发送。它也在 REP 消息的接收方预计无法在 REQ:Local CM Response Timeout 指定的时间内响应时作为对 REP 消息的响应发送。MRA 的发送是为了防止通信建立协议中的另一方不必要地超时通信建立尝试或用不必要的重试淹没链路。
+
+表 100 MRA 消息内容
+
+字段 | 描述 | 用途 | 字节[位]偏移 | 长度（位） | 值
+---|---|---|---|---|---
+Local Communication ID | 参见第 12.7.1 节 | C, EE | 0 | 32 |
+Remote Communication ID | 参见第 12.7.2 节 | C, EE | 4 | 32 |
+Message MRAed | 被 MRA 的消息 | C, EE | 8 | 2 | 0x0 - REQ，0x1 - REP，0x2 - LAP
+（保留）| | | 8[2] | 6 |
+ServiceTimeout | 参见第 12.7.32 节 | C, EE | 9 | 5 |
+（保留）| | | 9[5] | 3 |
+PrivateData | 参见第 12.7.35 节 | C, EE | 10 | 1776 |
+
+12.6.7 REJ - 拒绝
+
+REJ 表示发送方不会继续通信建立序列，以及它不继续的原因。
+
+表 101 REJ 消息内容
+
+字段 | 描述 | 用途 | 字节[位]偏移 | 长度（位） | 值
+---|---|---|---|---|---
+Local Communication ID | 参见第 12.7.1 节。如果此 REJ 以原因码 6（无效通信 ID）发送，此字段应设置为与被拒绝的收到消息中的"Remote Communication ID"字段相同的值。 | C, EE | 0 | 32 | 如果拒绝 REQ 且未发送 MRA 则为 0
+Remote Communication ID | 参见第 12.7.2 节。如果此 REJ 以原因码 6（无效通信 ID）发送，此字段应设置为与被拒绝的收到消息中的"Local Communication ID"字段相同的值。 | C, EE | 4 | 32 | 如果因 REP 超时拒绝且未收到 MRA 则为 0
+Message REJected | 其内容导致发送方拒绝通信建立尝试的消息。REJ 消息仅在接收到 REQ、接收到 REP 或通信建立序列中发生超时时发送。特别地，REJ 从不作为接收 MRA 或 RTU 的响应发送。 | C, EE | 8 | 2 | 0x0 - REQ（被动端在收到 REQ 并基于该 REQ 内容拒绝通信建立尝试时使用此代码）；0x1 - REP（主动端在收到 REP 并基于该 REP 内容拒绝通信建立尝试时使用此代码）；0x2 - 无消息（主动端和被动端在作为 CM 协议超时结果发送 REJ 时都使用此代码）
+（保留）| | | 8[2] | 6 |
+Reject Info Length | 如果非零，表示有效的附加拒绝信息的长度（字节）。发送方不要求提供附加拒绝信息，即使它在 REJ 消息中放置的原因码允许这样做。如果发送方决定不提供附加拒绝信息，应将此字段设置为零。 | C, EE | 9 | 7 |
+（保留）| | | 9[7] | 1 |
+Reason | 表示发送方终止通信建立过程原因的错误代码。 | C, EE | 10 | 16 |
+Additional Reject Information (ARI) | 与原因码关联的信息，如第 12.6.7.2 节所规定。如果信息的位数未完全填满 Reject Info Length 给出的字节数（例如 ARI 字段包含 20 位 Flow Label），则按第 1.5.1 节定义将位打包到字节中，最后一个字节的剩余最低有效位全部设置为零。 | C, EE | 12 | 576 |
+PrivateData | 参见第 12.7.35 节 | C, EE | 84 | 1184 |
+
+12.6.7.1 REJ 消息示例
+
+因不可接受的主要端口 LID 而拒绝 REQ 并建议使用主要端口 LID 200 的 REJ 的字段内容如下表所示。
+
+表 102 REJ 消息示例
+
+字段 | 内容
+---|---
+Local Communication ID | 0
+Remote Communication ID | 0
+Message REJected | 0
+Reason | 13
+Reject Info Length | 2
+Additional Reject Information (ARI) | 200
+PrivateData | 空
+
+12.6.7.2 拒绝原因
+
+代码 | 原因 | 描述 | 附加拒绝信息字段的含义（如果存在）
+---|---|---|---
+1 | 无可用 QP | REQ 消息要求接收方分配 QP，但没有可用的 |
+2 | 无可用 EEC | REQ 消息要求接收方分配 EE 上下文，但没有可用的 |
+3 | 无可用资源 | REQ 消息要求接收方分配 QP 或 EE 上下文以外的资源，但没有可用的 |
+4 | 超时 | CM 协议等待消息超时 | Local CA GUID。收到带有此原因码的 REJ 消息的接收方必须使用此 CA GUID 来识别发送方，因为 REJ 消息中的 Remote Communication ID 可能无效。
+5 | 不支持的请求 | 接收方 CM 不支持此请求 |
+6 | 无效通信 ID | 接收方收到的 CM 消息中 Local Communication ID、Remote Communication ID 或两者无效 |
+7 | 无效通信实例 | Local Communication ID、Remote Communication ID、QPN/EECN 元组不引用任何有效的通信实例 |
+8 | 无效 Service ID | REQ 消息的接收方不识别或不支持与指定 ServiceID 关联的服务 |
+9 | 无效传输服务类型 | REQ 消息的接收方不识别或不支持请求的传输服务类型 |
+10 | 过时连接 | REQ/REP 的接收方确定它已经与 REQ/REP 中指定的"Local QPN"或"Local EECN"有连接。收到带有此原因的 REJ 后，REJ 接收方应使 QP 或 EE 上下文按第 12.9.8.4 节所述进入 TimeWait 状态。 |
+11 | RDC 不存在 | REQ 中描述的可靠数据报通道（Local EECN/Remote EECN）在 REQ 中指定的 Primary Remote Port LID（或当 Primary Remote Port GID 有效时使用 GID）标识的 CA 上不存在 |
+12 | Primary Remote Port GID 被拒绝 | REQ 消息的接收方不能（或不愿）接受 Primary Remote Port GID | 可接受端口的 GID
+13 | Primary Remote Port LID 被拒绝 | REQ 消息的接收方不能（或不愿）接受 Primary Remote Port LID | 可接受端口的 LID
+14 | 无效 Primary SL | REQ 消息的接收方不支持请求的 Primary SL | 可接受的 SL
+15 | 无效 Primary Traffic Class | REQ 消息的接收方不支持请求的 Primary Traffic Class | 可接受的 Traffic Class
+16 | 无效 Primary Hop Limit | REQ 消息的接收方不能（或不愿）接受 Primary Hop Limit | 可接受的 Hop Limit
+17 | 无效 Primary Packet Rate | REQ 消息的接收方无法将其发送器调整为以符合请求的 Primary Packet Rate 所需的慢速度发送 | 最小可接受的 Packet Rate
+18 | Alternate Remote Port GID 被拒绝 | REQ 消息的接收方不能（或不愿）接受 Alternate Remote Port GID | 可接受端口的 GID
+19 | Alternate Remote Port LID 被拒绝 | REQ 消息的接收方不能（或不愿）接受 Alternate Remote Port LID | 可接受端口的 LID
+20 | 无效 Alternate SL | REQ 消息的接收方不支持请求的 Alternate SL | 可接受的 SL
+21 | 无效 Alternate Traffic Class | REQ 消息的接收方不支持请求的 Alternate Traffic Class | 可接受的 Traffic Class
+22 | 无效 Alternate Hop Limit | REQ 消息的接收方不能（或不愿）接受 Alternate Hop Limit | 可接受的 Hop Limit
+23 | 无效 Alternate Packet Rate | REQ 消息的接收方无法将其发送器调整为以符合请求的 Alternate Packet Rate 所需的慢速度发送 | 最小可接受的 Packet Rate
+24 | 端口和 CM 重定向 | REQ 消息的接收方支持请求的 Service ID，但在 ARI 指定的端点。后续 CM 消息也应发送到该端点。 | 第 13.4.8.1 节中记录的 ClassPortInfo 数据结构，描述后续 CM 消息应发送到何处，以及新 REQ 中应提议的端口 GID。
+25 | 端口重定向 | REQ 消息的接收方支持请求的 Service ID，但在 ARI 指定的端口。后续 CM 消息应发送到原始 REQ 发送的端口。 | 新 REQ 中应提议的端口 GID
+26 | 无效路径 MTU | REQ 消息的接收方不能支持指定的最大数据包有效载荷大小 | 最大可接受的数据包有效载荷大小
+27 | 响应者资源不足 | REP 消息中 Responder Resources（用于 RDMA Read/Atomic）的值不足 |
+28 | 消费者拒绝 | 消费者因其他 REJ 代码中未列出的原因决定拒绝通信或 EE 上下文建立尝试。通常这基于消息 PrivateData 字段中传达的信息发生。也可能因为消费者因与其收到的任何 CM 消息无关的原因决定终止通信或 EE 上下文建立尝试。因此，如果消费者决定在通信或 EE 上下文建立尝试过程中销毁 QP 或 EEC，这将是适当的原因码。 | 由消费者定义
+29 | RNR Retry Count 拒绝 | 消息的接收方拒绝 RNR NAK 重试计数值 |
+30 | 重复 Local Communication ID | REQ 消息的接收方确定它已经与发送方有一个使用与 REQ 中指定的相同 Local Communication ID 的连接 |
+31 | 不支持的类版本 | REQ 消息的接收方不支持包含 REQ 的 MAD 头部中指定的类版本。返回此代码时，与此 REJ 消息关联的 MAD 头部中 Status 字段的"Code for Invalid Field"部分应包含值 1。（指定的类版本不受支持。）详情参见表 115 MAD 通用状态字段位值。 | 支持的最高 CM 类版本
+32 | 无效 Primary Flow Label | REQ 消息的接收方不支持请求的 Primary Flow Label | 可接受的 Flow Label
+33 | 无效 Alternate Flow Label | REQ 消息的接收方不支持请求的 Alternate Flow Label | 可接受的 Flow Label
+
+12.6.8 REP - 通信请求回复
+
+REP 作为对 REQ 的响应返回，表示响应方接受 ServiceID、提议的主要端口以及 REQ PrivateData 区域中指定的任何参数。
+
+当 REQ:RDC Exists 在 REP 所响应的 REQ 中被设置时，REP 的发送方或接收方都不应更改已存在的可靠数据报通道，因此 REP 消息中的许多字段在这种情况下不使用。这些字段在下表中注明。所有此类未使用的字段应由发送方设置为 0，并由接收方忽略。
+
+表 103 REP 消息内容
+
+字段 | 描述 | 用途 | 字节[位]偏移 | 长度（位） | 值
+---|---|---|---|---|---
+Local Communication ID | 参见第 12.7.1 节 | C, EE | 0 | 32 |
+Remote Communication ID | 参见第 12.7.2 节 | C, EE | 4 | 32 | REQ 中存在的值
+Local Q_Key | 参见第 12.7.13 节 | EE | 8 | 32 |
+Local QPN | 参见第 12.7.12 节 | C, EE | 12 | 24 |
+（保留）| | | 15 | 8 |
+Local EE Context Number | 参见第 12.7.14 节 | EE | 16 | 24 |
+（保留）| | | 19 | 8 |
+Starting PSN | 参见第 12.7.31 节 | C, EE | 20 | 24 | RDC 存在时为 0
+（保留）| | | 23 | 8 |
+Responder Resources | 参见第 12.7.29 节 | C, EE | 24 | 8 | RDC 存在时为 0
+Initiator Depth | 参见第 12.7.30 节 | C, EE | 25 | 8 | RDC 存在时为 0
+Target ACK Delay | 参见第 12.7.33 节 | C, EE | 26 | 5 | RDC 存在时为 0
+Failover Accepted | 参见第 12.7.36 节 | C, EE | 26[5] | 2 | 0：故障转移被接受，或 RDC 存在；1：故障转移端口被拒绝，因为不支持故障转移，备用路径参数未被检查；2：支持故障转移且所有备用路径参数有效，但故障转移端口因其他原因被拒绝
+End-To-End Flow Control | 参见第 12.7.26 节 | C | 26[7] | 1 | RDC 存在时为 0
+RNR Retry Count | 参见第 12.7.39 节 | C, EE | 27 | 3 | RDC 存在时为 0
+SRQ | | | 27[3] | 1 | SRQ 存在时为 1，不存在时为 0
+（保留）| | | 27[2] | 4 |
+Local CA GUID | 参见第 12.7.9 节 | C, EE | 28 | 64 |
+PrivateData | 参见第 12.7.35 节 | C, EE | 36 | 1568 |
+
+12.6.9 RTU - 就绪使用
+
+RTU 表示连接已建立，接收方可以开始传输。
+
+表 104 RTU 消息内容
+
+字段 | 描述 | 用途 | 字节[位]偏移 | 长度（位）
+---|---|---|---|---
+Local Communication ID | 参见第 12.7.1 节 | C, EE | 0 | 32
+Remote Communication ID | 参见第 12.7.2 节 | C, EE | 4 | 32
+PrivateData | 参见第 12.7.35 节 | C, EE | 8 | 1792
+
+12.6.10 DREQ - 通信释放请求（断开请求）
+
+DREQ 用于发起连接释放序列。DREQ 仅用于释放 RC QP、UC QP 或 EE 上下文之间的连接。
+
+Local Communication ID 和 Remote Communication ID 的值是创建通道时使用的值。
+
+表 105 DREQ 消息内容
+
+字段 | 描述 | 用途 | 字节[位]偏移 | 长度（位）
+---|---|---|---|---
+Local Communication ID | 参见第 12.7.1 节 | C, EE | 0 | 32
+Remote Communication ID | 参见第 12.7.2 节 | C, EE | 4 | 32
+Remote QPN/EECN | 参见第 12.7.37 节 | C, EE | 8 | 24
+（保留）| | | 11 | 8
+PrivateData | 参见第 12.7.35 节 | C, EE | 12 | 1760
+
+12.6.11 DREP - 通信释放请求回复
+
+DREP 作为对 DREQ 的响应发送，表示发送方已收到 DREQ。
+
+表 106 DREP 消息内容
+
+字段 | 描述 | 用途 | 字节[位]偏移 | 长度（位）
+---|---|---|---|---
+Local Communication ID | 参见第 12.7.1 节 | C, EE | 0 | 32
+Remote Communication ID | 参见第 12.7.2 节 | C, EE | 4 | 32
+PrivateData | 参见第 12.7.35 节 | C, EE | 8 | 1792
+
+12.7 消息字段详情
+
+下表汇总了每个消息字段，并指出消费者可以在哪里找到填充该字段所需的内容。
+
+表 107 消息字段来源
+
+字段 | 填充来源
+---|---
+Local Communication ID | 发送消息的消费者选择此值。参见第 12.7.1 节。
+Remote Communication ID | 回复消息的消费者选择此值。参见第 12.7.2 节。
+Service ID | 假设消费者使用 InfiniBand 服务命名功能，此值来自 ServiceRecord，如第 15.2.5.14 节"ServiceRecord"中所定义。
+Remote CM Response Timeout | 消费者应将此字段设置得足够大，以允许在正常情况下接收方能够处理传入消息并使响应消息穿越源和目的地之间的路径。接收方的服务时间取决于请求的服务，但成功穿越路径所需的最大时间可在第 15.2.5.16 节"PathRecord"定义的 PathRecord 中找到。（选择使用哪条特定路径是留给消费者的策略决定。）InfiniBand 架构中任何管理器（包括 CM）生成响应所需时间的建议上限在第 13.4.6.2 节"定时器和超时"中记录。
+Local CM Response Timeout | 此超时期间需要允许源和目的地之间的路径被穿越两次，还需要允许处理 REP 消息。处理 REP 消息所需的时间可能取决于请求的服务，但成功穿越路径所需的最大时间可在第 15.2.5.16 节"PathRecord"定义的 PathRecord 中找到。InfiniBand 架构中任何管理器（包括 CM）生成响应所需时间的建议上限在第 13.4.6.2 节"定时器和超时"中记录。
+Transport Service Type | 消费者根据其请求的服务类型设置此项：可靠连接、不可靠连接或可靠数据报。
+Subnet Local | 可通过比较与 Local Port GID 和 Remote Port GID 关联的 PortInfo:GidPrefix 字段来确定。PortInfo 记录在第 15.2.5.3 节"PortInfoRecord"中定义。
+Local CA GUID | 此信息可在 NodeInfo:NodeGUID 字段中找到，如第 14.2.5.3 节"NodeInfo"中所定义。（使用哪个 CA 是留给消费者的策略决定。）
+Local Port GID | 此信息可在 GidInfo 记录中找到，如第 15.2.5.18 节"GuidInfoRecord"中所定义。（在 CA 上使用哪个端口以及在所选端口上使用哪个可用 GID 是留给消费者的策略决定。）
+Local Port LID | 此信息可在 PortInfo:LID 字段中找到，如第 14.2.5.6 节"PortInfo"中所定义。（在 CA 上使用哪个端口以及在所选端口上使用哪个可用 LID 是留给消费者的策略决定。）
+Local QPN | 消费者可以通过查询其提供用于连接建立的队列对来确定 HCA 的此值。Query Queue Pair Verb 在第 11.2.4.3 节"Query Queue Pair"中定义。（如何为 TCA 确定此信息是特定于实现的。）
+Local Q_Key | 消费者可以通过查询其提供用于连接建立的队列对来确定 HCA 的此值。Query Queue Pair Verb 在第 11.2.4.3 节"Query Queue Pair"中定义。（如何为 TCA 确定此信息是特定于实现的。）
+Local EECN | 消费者可以通过查询其提供用于通信建立的 EE 上下文来确定 HCA 的此值。Query EE Context Verb 在第 11.2.7.3 节"Query EE Context"中定义。（如何为 TCA 确定此信息是特定于实现的。）
+Remote EECN | 数据源自现有连接的远端，并在 REP 消息中返回给本地端。远端以与 Local EECN 相同的方式确定。
+Service Level | 此信息可在 PathRecord:SL 字段中找到，如第 15.2.5.16 节"PathRecord"中所定义。
+Traffic Class | 此信息可在 PathRecord:TClass 字段中找到，如第 15.2.5.16 节"PathRecord"中所定义。
+Flow Label | 此字段的目的是标识必须按顺序交付的一组数据包。参见第 8.3 节"全局路由头"了解如何选择此值。
+Hop Limit | 此信息可在 PathRecord:HopLimit 字段中找到，如第 15.2.5.16 节"PathRecord"中所定义。
+Primary Remote Port GID | 此信息可在与远端端口关联的 GidInfo 记录中找到，如第 15.2.5.18 节"GuidInfoRecord"中所定义。基于请求的服务应针对的端口可在 ServiceRecord 中找到，如第 15.2.5.14 节"ServiceRecord"中所定义。
+Primary Remote Port LID | 此信息可在与远端端口关联的 PortInfo:LID 字段中找到，如第 14.2.5.6 节"PortInfo"中所定义。基于请求的服务应针对的端口可在 ServiceRecord 中找到。
+Alternate Remote Port GID | 此信息可在与远端端口关联的 GidInfo 记录中找到，如第 15.2.5.18 节"GuidInfoRecord"中所定义。
+Alternate Remote Port LID | 此信息可在与远端端口关联的 PortInfo:LID 字段中找到，如第 14.2.5.6 节"PortInfo"中所定义。
+Partition Key | 此信息可在 PathRecord:P_Key 字段中找到，如第 15.2.5.16 节"PathRecord"中所定义。
+Packet Rate | 此信息可在 PathRecord:Rate 字段中找到，如第 15.2.5.16 节"PathRecord"中所定义。
+End-to-End Flow Control | 此字段用于 RC 服务连接。对于 HCA，如果 RC QP 未与 SRQ 关联，End-to-End Flow Control 位必须设置为 1。对于 HCA，如果 RC QP 与 SRQ 关联，End-to-End Flow Control 位必须设置为 0。TCA 是否支持 End-to-End Flow Control 是实现选项，因此规定 TCA 中此字段的来源不在 InfiniBand 架构的范围之内。注意：1 表示支持 e2e 流量控制，0 表示不支持。
+SRQ | 此字段用于 RC 服务连接。如果 QP 与 SRQ 关联，此位必须设置为 1。如果 QP 未与 SRQ 关联，此位必须设置为 0。
+Max CM Retries | 此字段的值是通信管理范围之外的策略决定。该字段在第 12.7.27 节中讨论。
+Path Packet Payload MTU | 此信息可在 PathRecord:Mtu 字段中找到，如第 15.2.5.16 节"PathRecord"中所定义。
+Responder Resources | 消费者可以通过查询将用于通信的 HCA 来确定 QP/EEC 的最大支持值。Query HCA Verb 在第 11.2.1.2 节"Query HCA"中定义。
+Initiator Depth | 消费者可以通过查询将用于通信的 HCA 来确定 QP/EEC 的最大支持值。Query HCA Verb 在第 11.2.1.2 节"Query HCA"中定义。
+Starting PSN | 此字段的值是通信管理范围之外的策略决定。该字段在第 12.7.31 节中讨论。
+Service Timeout | 消费者应将此字段设置得足够大，以允许其完成传入消息的处理并使其发送的响应消息穿越源和目的地之间的路径。
+Target ACK Delay | 此字段的值是通信管理范围之外的策略决定。该字段在第 12.7.33 节"Target ACK Delay"中讨论。
+Local ACK Timeout | 此字段的值是通信管理范围之外的策略决定。该字段在第 12.7.34 节"Local ACK Timeout"中讨论。
+PrivateData | 此字段的内容不在 InfiniBand 规范定义的范围之内；此字段的用途（如果有）由更高级别的通信建立协议规定。
+Failover Accepted | 按照第 12.7.36 节"Failover Accepted"中的描述设置。
+Remote QPN/EECN | 这应与 REP 消息中返回的 Local QPN/Local EECN 相同。
+Retry Count | 此字段的值是通信管理范围之外的策略决定。该字段在第 12.7.38 节"Retry Count"中讨论。
+RNR Retry Count | 此字段的值是通信管理范围之外的策略决定。该字段在第 12.7.39 节"RNR Retry Count"中讨论。
+
+12.7.1 Local Communication ID
+
+从发送方角度唯一标识此连接的标识符。发送方必须在通信建立和释放的所有阶段使用相同的标识符。在连接的生命期内，或在与连接相关的任何消息仍可能在网络中时，它不得重用 Local Communication ID。（与连接相关的消息可能在网络中存在多长时间的问题在第 12.9.8.4 节中涉及。）Communication ID 允许接收方确定该消息是旧消息的副本还是代表新的连接请求。
+
+12.7.2 Remote Communication ID
+
+从接收方角度唯一标识此连接的标识符。（例如，对于 REP 消息，这将与在 REQ 消息中收到的 Local Communication ID 相同。）通信管理 MAD 中 Local Communication ID 和 Remote Communication ID 字段的值在请求和回复之间交换。
+
+(Local Communication ID, Remote Communication ID) 对用于在建立、故障转移管理和释放期间引用连接。具有无效 Communication ID 的 CM 消息不应被处理，并应按第 12.6.7 节的规定被拒绝。
+
+12.7.3 ServiceID
+
+指定所请求服务的标识符。ServiceID 字段指定请求者所需的服务编号。这些包括但不限于为典型 TCP 服务定义的服务编号。服务和 ServiceID 之间的映射不在通信管理的范围之内。
+
+12.7.4 Remote CM Response Timeout
+
+接收 CM 消息的一方应在其内传输响应给发送方的时间，表示为 (4.096 µS * 2^Remote CM Response Timeout)。此值为无符号数。接收方使用此信息来确定是否应发送 MRA。（参见第 12.9.8.5 节）
+
+12.7.5 Local CM Response Timeout
+
+远端 CM 应等待本地 CM 对远端 CM 发送的 CM 消息的响应的时间，表示为 (4.096 µS * 2^Local CM Response Timeout)。此值为无符号数。注意，Remote CM Response Timeout 是从接收消息到传输响应之间的时间，而 Local CM Response Timeout 包含该"往返"时间以及往返数据包传输时间。（参见第 12.9.8.5 节）发起方 CM 负责通过子网管理或其他手段确定此值。
+
+12.7.6 Transport Service Type
+
+指定所需的服务类型：可靠连接、不可靠连接或可靠数据报。该字段编码如下：
+0：RC
+1：UC
+2：RD
+3：保留
+
+12.7.7 Subnet Local
+
+0：本地和远端 CA 端口在不同子网上
+1：本地和远端 CA 端口在同一子网上
+
+12.7.8 本节已删除
+
+本节已删除。
+
+12.7.9 Local CA GUID
+
+发送方通道适配器的 EUI-64 GUID。
+
+12.7.10 Local Port GID
+
+要在其上建立通道的本地 CA 端口的 GID。无论本地和远端端口是在同一子网还是不同子网上，此字段都应有效。如果不指定备用路径，Alternate Local Port GID 字段应设置为零。如果此字段非零，则应包含有效的 GID。
+
+12.7.11 Local Port LID
+
+要在其上建立通道的本地 CA 端口的 LID。当本地和远端端口在不同子网上时，此字段必须是被动端将作为返回路径目标的路由器的 LID。如果不指定备用路径，Alternate Local Port LID 字段应设置为零。
+
+12.7.12 Local QPN
+
+消息发送方的 QP 的 QPN，通道将在该 QP 上建立。一个可靠数据报 QP 可以与多个 EE 上下文关联。建立 RD 通道时必须指定 QPN，但此 QPN 的使用不限于此 RDC。一旦消费者建立了可靠数据报通道，消费者可以在 RDC 上使用额外的 QP 而无需额外的连接建立交换。
+
+CM 不应用于将 QP 的发送工作队列连接到同一 QP 的接收工作队列。（如果需要，消费者可以使用 Modify QP Verb 来实现。）在对等方之间进行连接建立时尝试这样做可能导致不可预测的行为。
+
+12.7.13 Local Q_Key
+
+（仅限 RD）由 Local QPN 指定的 QP 的 Q_Key。
+
+12.7.14 Local EECN
+
+消息发送方一端 RD 通道的 EE 上下文编号。
+
+12.7.15 Remote EECN
+
+现有可靠数据报通道远端的 EE 上下文编号。如果 REQ:RDC Exists 未设置则为 0。
+
+12.7.16 Service Level
+
+放入接收方发送的数据包的 Service Level 字段中的值。此 Service Level 是发起方希望目标使用的。关于 Service Level 的更多信息，参见第 7.6.5 节"Service Level"（第 185 页）。
+
+12.7.17 Traffic Class
+
+定义全局路由数据包的 Traffic Class。
+
+12.7.18 Flow Label
+
+定义全局路由数据包的 Flow Label。
+
+12.7.19 Hop Limit
+
+数据包在子网之间跳转的最大次数，超过此次数后将被丢弃。
+
+12.7.20 Primary Remote Port GID
+
+远端节点 CA 端口的 GID，本地节点希望在该端口上建立通道。无论本地和远端端口是在同一还是不同子网上，此字段都应有效。远端节点可以发送 REJ 拒绝此端口，并可选择性地建议可接受的端口。
+
+12.7.21 Primary Remote Port LID
+
+远端节点 CA 端口的 LID，本地节点希望在该端口上建立通道。远端节点可以发送 REJ 拒绝此端口，并可选择性地建议可接受的端口。发送方负责确保 LID 和 GID 引用同一端口。
+
+12.7.22 Alternate Remote Port GID
+
+如第 12.7.20 节所述。不支持自动故障转移的 CA 应将 REP 的"Failover Accepted"字段设置为 1。如果此字段非零，则应包含有效的 GID。
+
+12.7.23 Alternate Remote Port LID
+
+如第 12.7.21 节所述。不支持自动故障转移的 CA 应将 REP 的"Failover Accepted"字段设置为 1。
+
+12.7.24 Partition Key
+
+用于正在建立的通道的 Partition Key。
+
+12.7.25 Packet Rate
+
+从 PathRecord:Rate 字段获得的提议路径的最大速率，如第 15.2.5.16 节"PathRecord"中所定义。
+
+12.7.26 End-to-End Flow Control
+
+表示本地 CA 是否实际实现了端到端流量控制（1），还是始终通告"无效信用"（0）。详情参见第 9.7.7.2 节"端到端（消息级别）流量控制"。
+
+12.7.27 Max CM Retries
+
+任一方可以重新发送 REQ、REP 或 DREQ 消息的最大次数。在不获得响应的情况下重新发送最大次数后，发送方应通过发送指示超时的 REJ 消息来终止协议。
+
+12.7.28 Path Packet Payload MTU
+
+指定正在建立的通道的最大数据包有效载荷大小（字节）。可选值为 256、512、1024、2048、4096 之一。此值适用于主要路径和备用路径。
+
+12.7.29 Responder Resources
+
+发送方将支持的来自远端 QP/EEC 的最大未完成 RDMA Read/Atomic 操作数。此值可以为零。HCA 能为 QP/EEC 支持的最大数可使用 Query HCA Verb 确定。参见第 11.2.1.2 节"Query HCA"。
+
+REQ 消息的接收方应选择不超过 REQ 中提供的 Responder Resources 的本地 Initiator Depth。如果 REQ 消息的接收方不愿或无法这样做，它应发送 REJ 消息以中止连接建立。
+
+REP 消息的接收方应决定 REP 中提供的 Responder Resources 是否足以满足 REP 接收方希望使用的 Initiator Depth。如果不足，它应发送 REJ 消息以中止连接建立。
+
+12.7.30 Initiator Depth
+
+发送方将对远端 QP/EEC 发出的最大未完成 RDMA Read/Atomic 操作数。此值可以为零。HCA 能为 QP/EEC 支持的最大数可使用 Query HCA Verb 确定。参见第 11.2.1.2 节"Query HCA"。
+
+REQ 消息的接收方应尝试选择大于或等于 REQ 消息中 Initiator Depth 的本地 Responder Resources 数。如果不愿或无法这样做，它可以发送包含少于 REQ 消息中 Initiator Depth 的 Responder Resources 的 REP 消息。
+
+12.7.31 Starting PSN
+
+远端节点（相对于 REQ 或 REP 消息的发送方）应通过新建通道开始传输的传输数据包序列号。此值应选择为最小化前一连接的数据包可能落入有效 PSN 窗口的机会。
+
+12.7.32 Service Timeout
+
+存在于 MRA 中。发送方发送 REP、RTU、APR 或 REJ（视情况而定）所需的最大时间。此值表示为从 MRA 被发布到发送队列起的 (4.096 µS * 2^Service Timeout)。MRA 的接收方在收到此消息后应等待指定时间加上一个数据包生存时间后才超时。（参见第 12.9.8.5 节）此值为无符号数。
+
+12.7.33 Target ACK Delay
+
+(4.096 µS * 2^Target ACK Delay) 表示目标 CA 接收消息到传输关联的 ACK 或 NAK 之间的最大预期时间间隔。这是目标提供给接收方的信息。它为接收方提供了关于目标最大消息处理延迟的信息，这是发送请求数据包后获得 ACK 或 NAK 总时间的一个组成部分。（另一个组成部分是网络传播延迟，取决于两个端点之间的交换机和路由器配置以及网络中的拥塞。）包含 Target ACK Delay 的消息的接收方应使用此值以及接收方对网络传播延迟的最佳估计来确定在使向目标的数据包传输超时之前等待多长时间。此值为无符号数。
+
+12.7.34 Local ACK Timeout
+
+表示远端使用的传输（ACK）超时值，表示为 (4.096 µS * 2^Local ACK Timeout)。由 REQ 发送方基于 (2 * PacketLifeTime + 本地 CA 的 ACK 延迟) 计算。虽然远端 CA 不要求使用此值作为其 ACK 超时，但强烈鼓励这样做。PacketLifeTime 表示数据包穿越源和目的 CA 之间路径所消耗的最大预期时间间隔。PacketLifeTime 包含在 PathRecord 中，如第 15.2.5.16 节"PathRecord"中所定义。Local ACK Timeout 为无符号数。
+
+如果为 Local ACK Timeout 选择了过小的值，远端 CA 报告的数据包传输超时次数可能增加，这可能增加 CA 成功发送数据包所需的工作量。如果选择了过大的值，注意到数据包未成功传输（例如由于线路上的 CRC 错误）所需的时间将增加，这可能增加从此类错误中恢复或报告此类错误所需的时间。
+
+12.7.35 PrivateData
+
+对通信管理协议透明的数据，从发送方传递到接收方。接收方可以选择根据私有数据接受或拒绝请求。PrivateData 字段的格式和含义特定于 ServiceID 和消息类型，不在通信管理中指定。
+
+12.7.36 Failover Accepted
+
+表示 REQ 的目标是否接受或拒绝了 REQ 中包含的备用端口地址。通过发送 REP，目标接受了连接请求，但它仍可能拒绝提议的故障转移端口。
+
+如果故障转移被接受，每个 CM 应使由 Local QPN 指定的关联 QP（对于 RC/UC）或 EEC（对于 RD）被置于 REARM Migration State（参见第 17.2.8.1 节"自动路径迁移协议"）。
+
+如果故障转移被拒绝，每个 CM 应在转换到 RTR 状态时使关联的 QP 或 EEC 被置于 Migstate:MIGRATED 状态。
+
+12.7.37 Remote QPN/EECN
+
+远端（相对于发送方）的 QPN 或 EECN（视情况而定），是消息的主题。提供了 (Local Communication ID, Remote Communication ID) 对引用正确资源的额外检查。
+
+12.7.38 Retry Count
+
+发送方希望接收方在发布完成错误之前重试超时、数据包序列等错误的总次数。详情参见第 9.9.2.1.1 节"请求者错误重试计数器"和第 9.9.2.4.1 节"请求者 A 类故障行为"了解重试计数器的工作方式。
+
+12.7.39 RNR Retry Count
+
+REQ 或 REP 发送方希望接收方在发布完成错误之前重试 RNR NAK 错误的总次数。详情参见第 9.9.2.1.1 节"请求者错误重试计数器"和第 9.9.2.4.1 节"请求者 A 类故障行为"了解 RNR 重试计数器的工作方式。
+
+12.8 备用路径管理
+
+IBA 支持自动路径迁移（参见第 17.2.8 节"自动路径迁移"），其中通道的流量（RC、UC、RD）可以被移动到预定的备用路径。初始备用路径在连接建立时建立，但如果发生迁移，则需要在重新启用迁移之前指定新路径。
+
+两个消息专用于备用路径管理。LAP - 加载备用路径（Load Alternate Path）携带新路径信息。APR - 备用路径响应（Alternate Path Response）通知请求者 LAP 请求的状态。请求者（即 LAP 消息的发送方）必须是在 CM 状态变为 Established 时处于主动/客户端角色的通道一方；被动端不应发送 LAP 消息。
+
+如果 LAP 接收方无法在 Remote CM Response Timeout 内发送 APR 消息，则可以发送 MRA 消息。由于 LAP 是幂等的，如果没有响应或未满足 Service Timeout，可以重新发送该消息。如果 LAP 请求指定的备用路径在各方面与主要路径相同，接收方应在 APR 中返回失败状态。发送方可以有未完成的 LAP 消息数量没有限制，但发送方在任何时候对每个远端 QP/EEC 最多只能有一个未完成的 LAP。
+
+LAP 和 APR 消息请求的 QP/EEC 状态更改可以通过 ModifyQP 或 ModifyEE Verb（第 11.2.4.2 节和第 11.2.7.2 节）来实现。仅修改 RC QP、UC QP 或 EE 上下文状态；LAP 和 APR 消息不修改与 RD QP 关联的状态。
+
+图 130 加载备用路径
+[图 130：LAP/APR 交换序列。A 发送 LAP，B 可选发送 MRA，然后 B 发送 APR。]
+
+12.8.1 LAP - 加载备用路径
+
+LAP 是一个可选消息，用于更改特定连接的备用路径信息。它可以在网络变化导致备用路径信息无效时发送以更新该信息，或在路径迁移发生后加载"新的"备用路径信息。加载备用路径信息不会启动自动故障转移的迁移过程；它只是指定路径迁移发生时使用哪条路径。
+
+表 108 LAP 消息内容
+
+字段 | 描述 | 字节[位]偏移 | 长度（位）
+---|---|---|---
+Local Communication ID | 参见第 12.7.1 节 | 0 | 32
+Remote Communication ID | 参见第 12.7.2 节 | 4 | 32
+（保留）| | 8 | 32
+Remote QPN/EECN | 参见第 12.7.37 节 | 12 | 24
+Remote CM Response Timeout | 参见第 12.7.4 节 | 15 | 5
+（保留）| | 15[5] | 3
+（保留）| | 16 | 32
+Alternate Local Port LID | 参见第 12.7.11 节 | 20 | 16
+Alternate Remote Port LID | 参见第 12.7.23 节 | 22 | 16
+Alternate Local Port GID | 参见第 12.7.10 节 | 24 | 128
+Alternate Remote Port GID | 参见第 12.7.22 节 | 40 | 128
+Alternate Flow Label | 参见第 12.7.18 节 | 56 | 20
+（保留）| | 58[4] | 4
+Alternate Traffic Class | 参见第 12.7.17 节 | 59 | 8
+Alternate Hop Limit | 参见第 12.7.19 节 | 60 | 8
+（保留）| | 61 | 2
+Alternate Packet Rate | 参见第 12.7.25 节 | 61[2] | 6
+Alternate SL | 参见第 12.7.16 节 | 62 | 4
+Alternate Subnet Local | 参见第 12.7.7 节 | 62[4] | 1
+（保留）| | 62[5] | 3
+Alternate Local ACK Timeout | 参见第 12.7.34 节 | 63 | 5
+（保留）| | 63[5] | 3
+Private Data | 参见第 12.7.35 节 | 64 | 1344
+
+12.8.2 APR - 备用路径响应
+
+APR 作为对 LAP 请求的响应发送。可以发送 MRA 以允许处理 LAP。
+
+表 109 APR 消息内容
+
+字段 | 描述 | 字节[位]偏移 | 长度（位）
+---|---|---|---
+Local Communication ID | 参见第 12.7.1 节 | 0 | 32
+Remote Communication ID | 参见第 12.7.2 节 | 4 | 32
+Additional Information Length | 如果非零，表示有效的附加信息的长度（字节）。发送方不要求提供附加信息，即使它在 APR 消息中放置的 AP 状态码允许这样做。如果发送方决定不提供附加信息，应将此字段设置为零。 | 8 | 8
+AP status | 参见第 12.8.2.1 节 | 9 | 8
+（保留）| | 10 | 16
+Additional Information | 与 AP 状态码关联的信息，如第 12.8.2.1 节所规定。如果信息的位数未完全填满 Additional Information Length 给出的字节数（例如 Additional Information 字段包含 20 位 Flow Label），则按第 1.5.1 节定义将位打包到字节中，最后一个字节的剩余最低有效位全部设置为零。 | 12 | 576
+Private Data | 参见第 12.7.35 节 | 84 | 1184
+
+12.8.2.1 AP Status
+
+值 | 描述 | 附加信息字段的含义（如果存在）
+---|---|---
+0 | 备用路径信息已加载 |
+1 | 无效的 Remote/Local Communication ID |
+2 | 不支持备用路径。备用路径参数未被检查。 |
+3 | 支持备用路径且所有备用路径参数有效，但故障转移端口因其他原因被拒绝。 |
+4 | 备用路径信息被拒绝 - 重定向 | 第 13.4.8.1 节"ClassPortInfo"（第 734 页）中描述的 ClassPortInfo 数据结构。LAP 发送方可以使用 ClassPortInfo 中的信息将 LAP 重新发送到能够处理该消息的实体。
+5 | 提议的备用路径与当前主要路径匹配 |
+6 | Remote QPN/EECN 与由 Local/Remote Communication ID 标识的连接不匹配 |
+7 | 提议的 Alternate Remote Port LID 被拒绝 | 可接受端口的 LID
+8 | 提议的 Alternate Remote Port GID 被拒绝 | 可接受端口的 GID
+9 | 提议的 Alternate Flow Label 被拒绝 | 可接受的 Flow Label
+10 | 提议的 Alternate Traffic Class 被拒绝 | 可接受的 Traffic Class
+11 | 提议的 Alternate Hop Limit 被拒绝 | 可接受的 Hop Limit
+12 | 提议的 Alternate Packet Rate 被拒绝 | 最小可接受的 Packet Rate
+13 | 提议的 Alternate SL 被拒绝 | 可接受的 SL
+
+12.9 通信建立和释放的状态转换图
+
+本节中的图详细说明了 IBA 通信建立和释放协议中所有有效的状态和状态转换。第 12.10 节包含梯形图，说明通过此状态图的各种路径。
+
+InfiniBand 通信建立和通信释放协议的结构使它们总能在有限的时间内运行到完成。通信建立协议的"完成"意味着通信要么被建立，要么所有参与通信的各方的状态恢复到空闲状态，如同从未建立过通信。通信释放协议的"完成"意味着通信被释放；此协议永远不会无法运行到完成。
+
+本节中的图假设消费者将 IBA 通信建立和释放协议运行到完成（成功或其他方式）。然而，消费者在通信建立/释放尝试运行到完成之前销毁涉及的 QP 或 EEC 是合法的。如果发生这种情况，QP 或 EEC 已被销毁的消费者有两个选择：他们可以忽略所有与涉及该 QP 或 EEC 的通信建立/释放尝试有关的传入消息（并让通信建立尝试超时），或者如果他们处于允许发送 REJ 的 CM 状态（即 REP Rcvd、MRA(REP) Sent、REQ Rcvd、MRA Sent），可以发送带有"Consumer Reject"原因码的 REJ 消息。
+
+12.9.1 图描述
+
+InfiniBand 只有一个通信建立协议，不同场景使用不同的消息。状态图被分为"主动端"和"被动端"。协议的主动端是试图发起从某个终端状态（Idle 和 Established）转出的一方。协议的被动端是响应主动端的一方。
+
+12.9.2 无效状态输入处理
+
+CM 协议中的几个状态是短暂的；从这些状态的转出仅取决于本地做出的决定，而不取决于从通信建立或释放尝试中的另一方接收的任何新输入。短暂状态有：
+
+• Peer Compare
+• Timeout
+• REJ Retry
+• REP Rcvd
+• DREQ Rcvd
+• DREP Timeout
+• REQ Rcvd
+• REJ Sent
+• RTU Timeout
+
+处理在短暂状态中接收到的任何输入消息的一般规则是保持该消息挂起，直到 CM 协议进入非短暂状态。
+
+在 InfiniBand 通信建立和释放协议的许多非短暂状态中，有一组定义好的输入消息可以在该状态中合法接收。一旦 CM 协议进入非短暂状态，处理无法在该状态中合法接收和处理的输入消息的一般规则是忽略它。CM 不应重试 REQ、REP 或 DREQ 消息超过 REQ:Max CM Retries 指定的次数。
+
+12.9.3 超时
+
+丢失或丢弃的消息最终将导致超时。由于所有各方最终都将返回空闲状态，因此作为超时结果重试消息发送没有正确性要求，尽管建议这样做。重试消息的发送方不得在重试之间修改消息内容。
+
+在以下状态图中，"Timeout"代表 Response Timeout。Service Timeout 会被特别标注。
+
+12.9.4 状态图注释
+
+所有发送或接收的 REJ 都会导致返回 IDLE（主动端）或 LISTEN（被动端），可能经过 TimeWait 状态（参见第 12.9.8.4 节）。
+
+在主动通信建立图中，从 Peer Compare 状态到被动 REQ_Rcvd 状态的转换仅在接收到的 REQ 中的 ServiceID 与发送的 REQ 中的 ServiceID 相同时才发生。（详情参见第 12.10.4 节）。否则，应启动新的连接建立实例。
+
+ServiceID 隐式定义了服务是客户端/服务器还是对等的，但服务器应用程序必须通知其 CM，以便 CM 正确处理入站 REQ。
+
+当消费者希望销毁处于 Established CM 状态的 QP 或 EEC 时，良好的做法是消费者在销毁 QP 或 EEC 之前先释放连接。这样做允许 CM 维护的与该 QP 或 EEC 相关的任何状态被清理。连接通过使用以下各节描述的状态转换序列之一从 Established 状态移动到 TimeWait 状态来释放。
+
+当 CM 状态为 IDLE、LISTEN 或 TimeWait 时，QP 或 EE 上下文允许处于 Error、Reset 或 Initialized 状态中的任何一个。在这些 CM 状态下，QP 或 EE 上下文处于哪个特定状态不在本规范的范围之内。CM 应避免在通知消费者 QP 已进入 Error 状态并给予消费者机会出队任何可能与该 QP 关联的工作完成之前，将 QP 从 Error 状态转换到 Reset 状态。如果 CM 不遵循此建议，消费者可能在 QP 被转换到 Reset 状态后无法出队与该 QP 关联的工作完成。
+
+12.9.5 通信建立和释放 - 主动端
+
+图 131 通信建立（主动端）
+
+[图 131：主动端状态转换图。主要路径：IDLE -> Send REQ -> REQ Sent -> Rcv REP -> REP Rcvd -> Send RTU -> Established。还包括 Peer Compare、MRA(REP) Sent、REP wait、REJ Retry、Timeout 等中间状态。从 Established 经 DREQ Sent/DREQ Rcvd 到 TimeWait。]
+
+12.9.6 通信建立 - 被动端
+
+图 132 通信建立（被动端）
+
+[图 132：被动端状态转换图。LISTEN -> Rcv REQ -> REQ Rcvd -> Send REP -> REP Sent -> Rcv RTU -> Established。还包括 MRA Sent、MRA(REP) Rcvd、RTU Timeout、REJ Sent 等中间状态。从 Established 经 DREQ Sent/DREQ Rcvd 到 TimeWait。]
+
+12.9.7 状态和转换定义
+
+以下表定义了每个状态及其可能的转换。
+
+这些表定义了协议，在与状态图冲突的情况下以这些表为准。
+
+在此表中，"CEP"（Channel EndPoint，通道端点）在协议用于建立或释放 RC 或 UC QP 之间的连接时表示 QP。在协议用于在两个 EE 上下文之间建立 RDC 时表示 EE 上下文。如果协议用于通告 RD QP 以在现有 RDC 上使用（即如果 REQ:RDC Exists 被设置），则没有 CEP，因此此表中调出的 CEP 状态转换在这种情况下不适用。（然而，CM 协议状态转换继续适用。）
+
+12.9.7.1 主动状态
+
+CM 状态 | 事件 | 动作/转换序列
+---|---|---
+IDLE | Send REQ | 发送 REQ / CM 到 REQ Sent / CEP 到 Initialized
+（默认）| 无 |
+REQ Sent | Receive REP | CM 到 REP Rcvd / CEP 到 Ready to Receive
+ | Receive REQ | 如果（ServiceID 匹配）到 Peer Compare
+ | Receive MRA(REQ) | CM 到 REP wait
+ | Response Timeout | CM 到 Timeout
+ | Receive REJ | CM 到 REJ Retry
+（默认）| 无 |
+Peer Compare | Entry | 如果（(本地 CA GUID 大于远端 CA GUID) 或 ((CEP 是 QP) 且 (本地 QPN 大于远端 QPN)) 或 ((CEP 是 EEC) 且 (本地 EECN 大于远端 EECN))）CM 到 REQ Sent，否则 CM 到 Passive:REQ Rcvd
+REP wait | Receive REP | CM 到 REP Rcvd / CEP 到 Ready to Receive
+ | Service Timeout | CM 到 Timeout
+ | Receive REJ | CM 到 REJ Retry
+（默认）| 无 |
+REJ Retry | Entry (Retry) | 发送 REQ / CM 到 REQ Sent
+ | Entry (No Retry) | CM 到 IDLE / CEP 到 Error
+REP Rcvd | Send RTU | 发送 RTU / CM 到 Established / CEP 到 Ready to Send
+ | Send MRA(REP) | CM 到 MRA(REP) Sent
+ | Send REJ | CM 到 IDLE / CEP 到 Error
+（默认）| 无 |
+MRA(REP) Sent | Send RTU | 发送 RTU / CM 到 Established / CEP 到 Ready to Send
+ | Send REJ | CM 到 IDLE / CEP 到 Error
+ | Receive REJ | CM 到 IDLE / CEP 到 Error
+ | Receive REP | 发送 MRA
+（默认）| 无 |
+Established | Receive DREQ | CM 到 DREQ Rcvd / CEP 到 Error
+ | Send DREQ | CM 到 DREQ Sent / CEP 到 Error
+ | Receive REQ | 参见第 12.9.8.3.1 节
+ | Receive REP | 发送 RTU
+ | Receive REJ | CM 到 TimeWait / CEP 到 Error
+（默认）| 无 |
+DREQ Sent | Timeout | CM 到 DREP Timeout
+ | Receive DREQ | CM 到 DREQ Rcvd
+ | Receive DREP | CM 到 TimeWait
+（默认）| 无 |
+DREQ Rcvd | Send DREP | CM 到 TimeWait
+（默认）| 无 |
+TimeWait | Entry | CM：启动定时器
+ | Receive DREQ | CM：发送 DREP（如果未超过 Max CM Retries）
+ | Timer Expiration | CM 到 IDLE
+（默认）| 无 |
+Timeout | Entry (Retry)（未超过最大重试次数）| 发送 REQ / CM 到 REQ Sent
+ | Entry (No Retry) | 发送 REJ / CM 到 IDLE / CEP 到 Error
+DREP Timeout | Entry (Retry)（未超过最大重试次数）| 发送 DREQ / CM 到 DREQ Sent
+ | Entry (No Retry) | CM 到 TimeWait
+（默认）| 无 |
+
+12.9.7.2 被动状态
+
+状态 | 事件 | 动作/转换序列
+---|---|---
+LISTEN | Receive REQ | CEP 到 Initialized / CM 到 REQ Rcvd
+（默认）| 无 |
+REQ Rcvd | Send REP | CEP 到 Ready to Receive / 发送 REP / CM 到 REP Sent
+ | Send MRA(REQ) | CM 到 MRA Sent
+ | Send REJ | CM 到 REJ Sent
+（默认）| 无 |
+MRA Sent | Send REP | CEP 到 Ready to Receive / 发送 REP / CM 到 REP Sent
+ | Send REJ | CM 到 REJ Sent
+ | Receive REJ | CM 到 LISTEN / CEP 到 Error
+ | Receive REQ | 发送 MRA
+（默认）| 无 |
+REJ Sent | (retry) Receive REQ | CM 到 REQ Rcvd
+ | (no retry) | CM 到 LISTEN / CEP 到 Error
+REP Sent | Receive RTU | CM 到 Established / CEP 到 Ready to Send
+ | Receive MRA(REP) | CM 到 MRA(REP) Rcvd
+ | Receive message on service CEP | CM 到 Established / CEP 到 Ready to Send
+ | Receive REJ | CM 到 Listen / CEP 到 Error
+ | Timeout | CM 到 RTU Timeout
+ | Receive REQ | 发送 REP
+（默认）| 无 |
+MRA(REP) Rcvd | Receive RTU | CM 到 Established / CEP 到 Ready to Send
+ | Service Timeout | CM 到 RTU Timeout
+ | Receive message on service CEP | CM 到 Established / CEP 到 Ready to Send
+ | Receive REJ | CM 到 LISTEN / CEP 到 Error
+（默认）| 无 |
+Established | Send DREQ | CM 到 DREQ Sent / CEP 到 Error
+ | Receive DREQ | CM 到 DREQ Rcvd / CEP 到 Error
+ | Receive REQ | 参见第 12.9.8.3.1 节
+（默认）| 无 |
+DREQ Rcvd | Send DREP | CM 到 TimeWait
+（默认）| 无 |
+DREQ Sent | Timeout | CM 到 DREP Timeout
+ | Receive DREQ | CM 到 DREQ Rcvd
+ | Receive DREP | CM 到 TimeWait
+（默认）| 无 |
+RTU Timeout | Retry REP | CM 到 REP Sent
+ | No Retry | 发送 REJ / CM 到 TimeWait / CEP 到 Error
+（默认）| 无 |
+TimeWait | Entry | CM：启动定时器
+ | Receive DREQ | CM：发送 DREP（如果未超过 Max CM Retries）
+ | Timer Expiration | CM 到 IDLE
+（默认）| 无 |
+DREP Timeout | Entry (Retry)（未超过最大重试次数）| 发送 DREQ / 到 DREQ Sent
+ | Entry (No Retry) | CM 到 TimeWait
+（默认）| 无 |
+
+12.9.8 状态详情
+
+12.9.8.1 Timeout
+
+消息可以重新发送不超过 REQ:Max CM Retries 次，但没有要求必须重新发送那么多次。
+
+12.9.8.2 RTU Timeout
+
+如果被动代理发送了 REP 但未收到 RTU 或 CEP（QP 或 EEC，视情况而定）上的消息，它将转换到 RTU Timeout。如果未超过 REQ:Max CM Retries，被动代理可以重新发送 REP。
+
+12.9.8.3 Established
+
+12.9.8.3.1 收到 REQ / 收到 REP
+
+（RC、UC）CM 可能收到在"REQ:local QPN"/"REP:local QPN"中指定远端 QPN 的 REQ/REP，而 CM 已经认为该远端 QPN 与本地 QP 连接。如果本地 QP 具有过时连接（如第 12.4.1 节所述），本地 CM 可能收到此类 REQ/REP。当 CM 收到此类 REQ/REP 时，它应通过向 REQ/REP 发出 REJ 来中止连接建立。然后它应发出 DREQ（将"DREQ:remote QPN"设置为 REQ/REP 中的远端 QPN），直到收到 DREP 或超过最大重试次数，并将本地 QP 置于 TimeWait 状态。
+
+（RD）CM 可能收到在"REQ:local EECN"/"REP:local EECN"中指定远端 EECN 的 REQ/REP，而 CM 已经认为该远端 EECN 与本地 EEC 连接。如果本地 EEC 具有过时连接（如第 12.4.1 节所述），本地 CM 可能收到此类 REQ/REP。当 CM 收到此类 REQ/REP 时，它应通过向 REQ/REP 发出 REJ 来中止连接建立。然后它应发出 DREQ（将"DREQ:remote EECN"设置为 REQ/REP 中的远端 EECN），直到收到 DREP 或超过最大重试次数，并将本地 EEC 置于 TimeWait 状态。
+
+如果 CM 如上所述收到 REQ/REP，如果 REQ/REP 具有与现有连接中相同的 Local Communication ID 和 Remote Communication ID，并且 REQ/REP 在主动/被动端可以合法重传 REQ/REP 的时间窗口内到达，CM 应将 REQ/REP 视为重试，而不启动上述过时连接处理。
+
+12.9.8.4 TimeWait
+
+PathRecord:PacketLifeTime（第 15.2.5.16 节"PathRecord"）字段定义了数据包可以在网络中存在的最大时间。
+
+TimeWait 定时器应设置为两倍的 PathRecord:PacketLifeTime 值加上远端的 Ack Delay。
+
+CM 负责将 QP/EEC 置于 TimeWait 状态，维持不少于 TimeWait 期间的状态，并在之后将其移除。
+
+在 TimeWait 状态中收到 DREQ 不应影响 TimeWait 定时器。
+
+12.9.8.5 消息接收确认（MRA）
+
+图 133 MRA 示例
+
+图 133 说明了 CM 消息交换中 MRA 消息的使用。"Local"和"Remote"是相对于 A 的。因为 B 无法在 Remote CM Response Timeout 内向 A 返回 REP 或 REJ，B 发送 MRA(REQ)，通知 A B 已收到 REQ 消息并正在处理。MRA(REQ) 包含 B 的 CM Service Timeout 值。B 完成其处理并在 Remote CM Service Timeout 到期之前向 A 发送 REP 消息。
+
+由于网络拥塞可能导致数据包传输时间不同（例如，MRA 可能以最短时间传输，而 REP 以最长时间传输，如 Tmin 和 Tmax 所示），A 应为 REP 的到达额外允许一个 PacketLifeTime。
+
+当 A 收到 REP 时，它意识到所需的处理不允许它足够快地传输 REJ 或 RTU 以在 Local CM Response Timeout 到期之前到达 B，因此它发送包含其 CM Service Timeout 值的 MRA(REP)。当它完成 REP 处理后，A 发送 RTU，在 Local CM Service Timeout 到期之前到达。
+
+[图 133：MRA 示例时序图，展示 REQ、MRA(REQ)、REP、MRA(REP)、RTU 消息的交换及各超时时间。]
+
+一旦收到 MRA，CM 不应在适用的 CM Service Timeout 期间加上 PacketLifeTime 之前重新发送被 MRA 确认的消息。
+
+12.9.8.6 超时和重试
+
+在通信建立协议中，REQ、REP 和 DREQ 消息的发送可以由发送方重试。重试发生在发送方在适当的响应超时期间内未从接收方收到响应消息之后。
+
+对于 REQ 消息，Remote CM Response Timeout 期间是接收方的"转身"时间。REQ 发送方可以在 (2 * PacketLifeTime + Remote CM Response Timeout) 之后认为 REQ（或响应）丢失。收到 REQ 后，接收方必须在 Remote CM Response Timeout 内发送 REP、REJ 或 MRA。Service Timeout 期间从发送 MRA 时开始，必须在其到期之前发送 REJ 或 REP。
+
+Local CM Response Timeout 告诉 REP 发送方等待 MRA、REJ 或 RTU 的时间。Local CM Response Timeout 值包含往返传输时间。如果 REP 发送方收到 MRA，它可以预期在 MRA 到达后 (Local CM Service Timeout + PacketLifeTime) 内收到 REJ 或 RTU。
+
+DREQ 消息的响应超时期间是原始 REQ 消息中的 Local CM Response Timeout。
+
+当发送方重试消息发送时，接收方可能接收到同一消息的多个副本。REQ（或 REP）消息的接收方应根据它收到最新 REQ（或 REP）消息的时间来确定其发送响应的时间；因此，它每次收到同一连接建立尝试的新 REQ（或 REP）时，剩余的回复时间都会重新设置为完整的响应超时期间。
+
+如果 REP 消息的发送方在重新发送 REP 消息后收到同一连接建立尝试的另一个 REQ 消息，它应将其响应超时期间重新设置为它在 REQ 消息中收到的完整 Local Response Timeout 期间。
+
+12.9.8.7 REJ Retry
+
+如果主动代理在 REQ Sent 或 REP Wait 状态中收到 REJ，主动代理可以选择执行重试。如果主动代理选择不重试，CEP 被置于 Error 状态，主动代理进入 Idle 状态。如果执行重试，主动代理必须使用与收到 REJ 回复的原始 REQ 消息不同的 Local Communication ID 重新发送 REQ 消息。
+
+12.9.8.8 REJ Sent
+
+当被动代理发送 REJ 时，它进入 REJ Sent 状态。如果被动代理选择不重试其连接建立尝试，它将 CEP 置于 Error 状态，如果 CEP 是队列对，则会导致发布到队列对接收队列的任何工作请求被刷新。如果被动代理希望避免其工作请求被刷新，它可以改为留在 REJ Sent 状态直到收到 REQ，届时它进入 REQ Rcvd 状态，连接建立正常继续。
+
+12.9.8.9 REP Sent / MRA(REP) Received
+
+如果被动代理在 REP Sent 或 MRA(REP) Rcvd 状态中收到连接的 LAP，当/如果被动代理超时并进入 RTU Timeout 状态时，它应采取该状态的"Retry REP"转换（假设未超过 REQ 消息中指定的重试计数）。收到 LAP 是主动代理认为连接已建立的强烈指示。通过重试 REP，被动代理通知主动代理连接实际上尚未完全建立，这将促使主动代理重试 RTU 以使其完全建立。如果被动代理不重试 REP，主动代理可能会陷入重试其 LAP 消息的循环中，直到被动代理最终使连接建立尝试超时并发送 REJ。
+
+12.9.9 连接状态
+
+通信管理器应在连接的生命期内维护以下信息：
+• Local Communication ID
+• Remote Communication ID
+• Local CM Response Timeout
+• Remote CM Response Timeout
+• Local QPN / Local EECN
+• Remote CA QPN / Remote CA EECN
+• Remote CA GUID
+• Remote CM LID / Remote CM GID
+• Max CM Retries
+• ClassVersion（如果支持多个 ClassVersion）
+
+12.10 通信建立梯形图
+
+以下梯形图展示了各种通信建立场景的消息交换。这些不适用于不可靠数据报（Service ID 解析参见第 12.11 节）。
+
+12.10.1 主动客户端到被动服务器 - 客户端和服务器都接受通信
+
+图 134 主动/被动，双方接受
+
+[图 134：ACTIVE 发送 REQ，PASSIVE 回复 REP，ACTIVE 发送 RTU。]
+
+对于 RC 和 UC 服务，上述交换建立连接。
+
+对于 RD 服务，上述交换必须执行以：
+• 在两个 EEC 之间建立可靠数据报通道
+• 解析 Service ID 并关联 QP 以在现有 RDC 上使用
+
+协作应用程序如何交换额外可用 QP 的信息是特定于应用程序的。
+
+12.10.2 主动客户端到被动服务器 - 服务器拒绝通信
+
+图 135 主动/被动，服务器拒绝
+
+[图 135：ACTIVE 发送 REQ，PASSIVE 回复 REJ。]
+
+上述交换在被动服务器不能或不愿执行请求的操作时发生。REJ 消息包含操作未执行的原因。
+
+12.10.3 主动客户端到被动服务器 - 客户端拒绝通信
+
+图 136 主动/被动，客户端拒绝
+
+[图 136：ACTIVE 发送 REQ，PASSIVE 回复 REP，ACTIVE 回复 REJ。]
+
+上述交换在请求的客户端决定不继续请求的操作时发生。（例如，客户端要求服务器不提供的自动路径迁移支持。）REJ 消息包含操作未继续的原因。
+
+12.10.4 对等到对等 - 双方接受通信
+
+图 137 主动/主动，双方接受
+
+[图 137：PEER A 和 PEER B 都发送 REQ。B 在比较中落败并承担被动角色。B 发送 REP，A 发送 RTU。]
+
+上述交换在两个对等实体尝试通信时发生。在这种情况下，两个 REQ 消息中的 ServiceID 相同。ServiceID 隐式定义了服务是客户端/服务器还是对等的，但应用程序必须通知 CM，以便 CM 正确处理入站 REQ。（对等通信建立尝试的 CM 协议状态转换与客户端/服务器通信建立尝试不同。特别是，Peer Compare 状态仅在对等通信建立尝试中进入。关于 Peer Compare 状态的描述，参见第 12.9.7.1 节。）
+
+Peer A 和 Peer B 比较其 CA（通道适配器）GUID，将每个作为大端值处理，以决定哪一方将在 CM 协议中承担主动角色。数值较小的 GUID 的对等方在通信建立协议的其余部分中承担被动角色。
+
+如果 CA GUID 匹配（例如两个进程使用同一 CA），则对等方在连接队列对之间建立连接的情况下比较其 QPN（使用 REQ:Local QPN 字段），或在可靠数据报通道建立的情况下比较其 EECN（使用 REQ:Local EECN 字段）。比较时将每个作为大端值处理，较小的 QPN/EECN 承担被动角色。
+
+CM 不应用于在单个 QP 上建立"环回"通道。
+
+12.10.5 主动对等到主动对等 - 被动方拒绝通信
+
+图 138 主动/主动，被动方拒绝
+
+[图 138：PEER A 和 PEER B 都发送 REQ。B 在比较中落败并承担被动角色。B 发送 REJ。]
+
+上述交换在"落败"的对等方决定不继续请求的操作时发生。REJ 消息包含操作未继续的原因。
+
+12.10.6 主动对等到主动对等 - 主动方拒绝通信
+
+图 139 主动/主动，主动方拒绝
+
+[图 139：PEER A 和 PEER B 都发送 REQ。B 在比较中落败并承担被动角色。B 发送 REP。A 发送 REJ。]
+
+上述交换在"获胜"的对等方决定不继续请求的操作时发生。REJ 消息包含操作未继续的原因。接收 REJ 消息的对等方返回 IDLE 状态。
+
+12.10.7 主动客户端到被动服务器（通过重定向器）- 所有方接受通信
+
+图 140 重定向，已接受
+
+[图 140：CLIENT 发送 REQ 到 REDIRECTOR，REDIRECTOR 回复 REJ（端口重定向），CLIENT 使用新 Local Communication ID 发送新 REQ 到 REDIRECTOR，REDIRECTOR 回复 REP，CLIENT 发送 RTU。数据在 CLIENT 和 SERVER 之间流动（SERVER 对 CLIENT 不可见）。]
+
+重定向器是代表在其他端口上支持的实体提供 CM 服务的 CM。两个端点的端口信息在 REQ 和 REP 消息中是明确的，允许重定向器作为另一实体的代理管理连接。
+
+上述交换在重定向器发送带有"Port Redirection"状态的 REJ 时发生，表示请求的 ServiceID 在不同端口上可用。请求的客户端（使用新的 Local Communication ID）发送提议 REJ 中指定端口的新 REQ。所有 CM 消息在客户端 CM 和重定向器之间交换，但已建立连接上的流量在客户端和服务器之间流动。
+
+12.10.8 通信释放
+
+以下梯形图展示了通信释放的消息交换。
+
+如本节所示的通信释放是非优雅的。收到断开请求后，每个 CM 应使受影响的 QP 被置于错误状态，导致挂起的工作请求以 Flush 错误状态完成。
+
+消费者可以自由定义和执行更优雅的通信释放协议，以允许通信的有序关闭。任何此类协议应在正常消息处理终止后利用下面说明的通信释放协议。
+
+12.10.8.1 断开请求
+
+图 141 断开请求
+
+[图 141：A 发送 DREQ，B 回复 DREP。]
+
+由于 DREQ 和 DREP 相对于正常通信流量是带外传输的，因此无法预测当前正在进行的操作将如何完成。
+
+12.11 Service ID 解析协议
+
+Service ID 解析（SIDR）提供了一种方式，使不可靠数据报（UD）服务的用户能够确定目标端口上支持给定 Service ID 的队列对。
+
+如果在通道适配器上以非固定 QPN 提供非管理服务，GSA 应支持此协议。如果此协议不被 CM 支持，ClassPortInfo 属性中 CapabilityMask 组件的 IsSIDRCapable 位应重置。详情参见第 16.7.3 节"属性"。
+
+该协议由单个请求和单个回复组成，使用面向 GSI 的不可靠管理数据报（MAD）。SIDR 消息属于通信管理类。
+
+如果 SIDR 响应返回有效的 QPN，返回的 QPN 应在 SIDR 请求头部中 P_Key 标识的分区中。
+
+12.11.1 SIDR_REQ - Service ID 解析请求
+
+SIDR_REQ 请求接收方返回通过 UD 消息与 SIDR_REQ:ServiceID 指定的实体通信所需的信息。
+
+表 110 SIDR_REQ 消息内容
+
+字段 | 描述 | 字节[位]偏移 | 大小（位）
+---|---|---|---
+RequestID | 参见第 12.11.1.1 节 | 0 | 32
+Partition Key | 参见第 12.11.1.2 节 | 4 | 16
+（保留）| | 6 | 16
+ServiceID | 参见第 12.11.1.3 节 | 8 | 64
+Private Data | 参见第 12.11.1.4 节 | 16 | 1728
+
+12.11.1.1 RequestID
+
+标识请求的 32 位值。请求的目标应在 SIDR_REP 消息中原样返回此值。如果 SIDR_REQ 消息被重新发送，发送方应发送相同的 RequestID。SIDR_REQ 接收方应使用 Source GID（或如果 GRH 不存在则使用 Source LID）来区分可能具有相同 RequestID 的不同请求者的请求。
+
+12.11.1.2 Partition Key
+
+发送方希望用于访问 Service ID 标识的服务的 Partition Key。
+
+12.11.1.3 Service ID
+
+发送方希望响应方为其提供 UD 寻址信息的 Service ID。更多信息参见第 12.7.3 节。
+
+12.11.1.4 Private Data
+
+对 SIDR 协议透明的数据，供请求者和响应者使用。例如，某些系统可能要求 PrivateData 区域包含授权密钥，然后才报告支持某些 ServiceID 的 QP。
+
+12.11.2 SIDR_REP - Service ID 解析响应
+
+SIDR_REP 返回通过 UD 消息与 SIDR_REQ:ServiceID 指定的实体通信所需的信息。
+
+表 111 SIDR_REP 消息内容
+
+字段 | 描述 | 字节[位]偏移 | 长度（位）
+---|---|---|---
+RequestID | 参见第 12.11.1.1 节 | 0 | 32
+Status | 参见第 12.11.2.1 节 | 4 | 8
+Additional Information Length | 如果非零，表示有效的附加信息的长度（字节）。发送方不要求提供附加信息，即使它在 SIDR_REP 消息中放置的 Status 码允许这样做。如果发送方决定不提供附加信息，应将此字段设置为零。 | 5 | 8
+（保留）| | 6 | 16
+QPN | 参见第 12.11.2.2 节 | 8 | 24
+（保留）| | 11 | 8
+ServiceID | 参见第 12.11.1.3 节 | 12 | 64
+Q_Key | 参见第 12.11.2.3 节 | 20 | 32
+Additional Information | 参见第 12.11.2.1 节 | 24 | 576
+Private Data | 参见第 12.11.1.4 节 | 96 | 1088
+
+12.11.2.1 Status
+
+Status 字段表明 QPN 和 Q_Key 字段是否有效，如果无效，则说明未提供有效 QPN 和 Q_Key 的原因。根据 Additional Information Length 字段的值，Additional Information 字段可能包含也可能不包含有效内容。
+
+值 | 描述 | 附加信息字段的含义（如果存在）
+---|---|---
+0 | QPN 和 Q_Key 有效 |
+1 | Service ID 不受支持 |
+2 | 被服务提供者拒绝 |
+3 | 无可用 QP |
+4 | 请求应重定向到 ClassPortInfo 指定的端点。QPN 和 Q_Key 无效。 | 第 13.4.8.1 节中记录的 ClassPortInfo 数据结构，描述 SIDR_REQ 应重定向到何处。
+5 | SIDR_REQ MAD 头部中指定的类版本不受支持。返回此代码时，与此 SIDR_REP 消息关联的 MAD 头部中 Status 字段的"Code for Invalid Field"部分应包含值 1。（指定的类版本不受支持。）详情参见表 115 MAD 通用状态字段位值。 | 支持的最高 CM 类版本
+6-255 | 保留 |
+
+12.11.2.2 QPN
+
+支持请求的 Service ID 的本地 QP 的 QPN。（仅在 Status 字段指示有效时有效。）
+
+12.11.2.3 Q_Key
+
+QPN 中返回的 QP 的 Q_Key。
+
+12.11.3 路径信息
+
+SIDR_REP 消息中返回的信息本身不足以创建可用的地址句柄。具体而言，除非发送不大于最小 PMTU 的数据包有效载荷或在最小宽度链路上传输，否则需要 PathRecord:Mtu 和 PathRecord:Rate 的值。这些值可通过子网管理获得（参见第 15.2.5.16 节）。
+

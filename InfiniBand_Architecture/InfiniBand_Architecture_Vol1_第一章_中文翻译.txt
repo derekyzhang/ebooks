@@ -1,0 +1,195 @@
+第一章：引言
+
+这是 InfiniBand 体系结构规范的第 1 卷。它是描述该体系结构的系列文档中的第一卷。
+
+1.1 致谢
+
+以下人员在本卷 InfiniBand 体系结构规范的开发过程中发挥了重要作用：
+
+指导委员会成员
+联合主席：
+Tom Bradicich    Tom Macdonald
+
+成员：
+Jacqueline Balfour    Ken Jansen         John Pescatore
+Kevin Deierling       Michael Krause     Jim Pinkerton
+Balint Fleischer      Todd Matters       Martin Whittaker
+Dr. Alfred Hartmann   Ed Miller          Bob Zak
+David Heisey
+
+技术工作组成员
+联合主席：
+Dwight Barron    Paul Grun    Jeff Hilland
+Irv Robinson     David Wooten
+
+成员：
+Dr. Alan Benner       Dr. Alfred Hartmann    Dr. Gregory F. Pfister
+Mark Bradley          Michael Krause         Greg Still
+Wolfgang Christl      Bill Lynn              Ken Ward
+Diego Crupnicoff      Ed Miller
+
+工作组联合主席
+链路工作组 (LWG)：
+Daniel Cassiday    Michael Krause
+
+软件工作组 (SWG)：
+Ed Miller    Renato J. Recio    Jim Pinkerton
+
+管理工作组 (MgtWG)：
+David W. Abmayr       Brian Forbes              Jeff Hilland
+Dr. Pankaj Mehra      Dr. Gregory F. Pfister    William H. Swortwood
+Dr. Mazin Yousif
+
+应用工作组 (AWG)：
+Dwight Barron    William Futral    Greg Pellegrino
+
+贡献者：
+David W. Abmayr           Dr. Ramon Acosta          Sesidhar Baddela
+Dr. Alan Benner           Frank L. Berry            Bruce Beukema
+Suri Brahmaroutu          David M. Brean            Tom Brey
+John Carrier              Daniel Cassiday           Norman Chou
+Ian Colloff               Joe Cowan                 David Craddock
+Olivier Crémel            Diego Crupnicoff          Paul Culley
+Roger Cummings            George Dake               Ellen Deleganes
+Kevin Deierling           Chunlei Dong              Scott Feller
+Brian Forbes              Dan Fowler                Giles Frazier
+Bill Futral               Dr. Freddy Gabbay         Narayanan Ganapathy
+David Garcia              Nimrod Gindi              Dror Goldenberg
+Nancy J. Golio            Paul Grun                 James Hamrick
+Dr. Alfred Hartmann       Yaron Haviv               Arel Hendel
+Jeff Hilland              Michael Heumann           Jenwei Hsieh
+Christopher J. Jackson    Jeff Jilg                 Dave Kasberg
+Vivek Kashyap             Dr. Ted Kim               Dr. Hiro Kishimoto
+Michael Krause            Alan Langerman            James W. Livingston
+Venitha L. Manter         Gunna Marripudi           Dr. Pankaj Mehra
+Charles Monia             Jim Mott                  Mark Myers
+Neil MacLean              Tarl Neustaedter          Rahul Nim
+Shravan Pargal            Joe Pelissier             Greg Pellegrino
+Dr. Gregory F. Pfister    Jim Pinkerton             Vandana Rao
+Renato J. Recio           Roger Ronald              William J. Rooney
+Hal Rosenstock            Tom Ryle                  Hide Senta
+Michael Shinkarovsky      Cris Simpson              William Strahm
+William H. Swortwood      Chris Szeto               Monika ten Bruggencate
+Pat Thaler                Saeki Toshiaki            Franco Travastino
+Dono Van-Mierop           Ken Ward                  Kurt Ware
+Tom Webber                Dong Wei                  Jeff Young
+Dr. Mazin Yousif
+
+1.2 InfiniBand 概念概述
+
+InfiniBand 体系结构规范描述了一种一阶互连技术，用于互连处理器节点和 I/O 节点以形成系统域网络。该体系结构独立于主机操作系统 (OS) 和处理器平台。
+
+图 1  IBA 系统域网络
+
+[图注：
+HCA = 处理器节点中的 InfiniBand 通道适配器
+TCA = I/O 节点中的 InfiniBand 通道适配器
+
+图中展示了处理器节点（含 CPU、内存、HCA）通过交换机 (Switch) 和 Fabric 连接到各种 I/O 机箱（含 TCA I/O 模块），包括 SCSI、以太网、光纤通道集线器及设备、图形、视频、控制台等设备，以及通过路由器连接到其他 IB 子网、WAN 和 LAN，还包括驱动器、TCA 控制器、存储子系统和 RAID 子系统。]
+
+1.2.1 问题
+
+现有的互连技术未能跟上计算机的演进步伐，以及互联网的流行成功对数据服务器、应用处理和企业计算所造成的日益增长的负担。集群、故障安全和 24x7 可用性等高端计算概念要求在处理节点之间以及处理器节点与 I/O 设备之间具有更大的数据移动能力。
+
+这些趋势要求更高的带宽和更低的延迟，它们将更多的功能下推到 I/O 设备，并且要求比当前可用方案更强的保护、更高的隔离性、确定性行为和更高的服务质量。
+
+1.2.2 特性
+
+InfiniBand 体系结构 (IBA) 基于点对点交换式 I/O Fabric 设计，其中终端节点设备（范围可以从非常廉价的 I/O 设备如单芯片 SCSI 或以太网适配器，到非常复杂的主机计算机）通过级联的交换设备互连。IBA 互连的物理特性支持两种主要环境，并针对这些环境进行了带宽、距离和成本的优化：
+
+• 模块到模块，典型代表为支持 I/O 模块插入槽的计算机系统
+• 机箱到机箱，典型代表为在数据中心环境中互连计算机、外部存储系统和外部 LAN/WAN 接入设备（如交换机、集线器和路由器）
+
+IBA 交换式 Fabric 提供了一种可靠的传输机制，其中消息被排入队列以在终端节点之间进行传递。一般而言，消息内容和含义不由 InfiniBand 体系结构指定，而是留给终端节点设备的设计者和托管在终端节点设备上的进程来定义。IBA 定义了足以支持可靠消息传递（发送/接收）和内存操作语义（例如远程 DMA）的硬件传输协议，而无需软件介入数据移动路径。IBA 定义了保护和错误检测机制，允许 IBA 事务从特权内核模式（以支持传统 I/O 和通信需求）或用户空间（以支持新兴的进程间通信需求）发起和终止。
+
+IBA 规范还解决了对丰富的可管理性基础设施的需求，以支持来自许多供应商的多代 IBA 组件之间随时间推移的互操作性。该基础设施为大批量、成本敏感的部署环境提供了易用性和一致的行为。IBA 还指定了与企业级管理工具互操作的行业标准管理接口，用于数据中心部署 IBA 所需的配置、资产管理、错误报告、性能指标收集和拓扑管理。
+
+1.2.3 优势
+
+尽管 IBA 具有诸多革命性方面，但该体系结构经过精心设计，以最大限度地减少对现有市场范式和商业实践的干扰。通过同时支持板卡和机箱互连，预计供应商能够在当前商业实践范围内，将 InfiniBand 体系结构技术应用于现有产品的未来版本，以最好地支持其客户需求。
+
+IBA 可以支持的带宽预计将保持比现有 I/O 介质（SCSI、光纤通道、以太网）高一个数量级。这确保了它作为使用这些技术连接 I/O 介质的通用互连的角色。强化这一点的是 IBA 对 IPv6 头部的原生使用，这支持 IBA Fabric 与传统互联网和内部网基础设施之间极其高效的连接。
+
+IBA 支持从简单到单个计算机系统的实现，并可扩展到包括：为提高系统可靠性而复制的组件、级联的交换式 Fabric 组件、用于可扩展 I/O 容量和性能的额外 I/O 单元、用于可扩展计算的额外主机节点计算元素，或它们的任意组合。InfiniBand 体系结构是一种革命性的体系结构，它使计算机系统能够跟上客户对更高可扩展性、更高带宽、更低 CPU 利用率、高可用性、高隔离性以及对互联网技术支持的不断增长的需求。
+
+作为一阶网络设计，IBA 专注于将数据移入和移出节点的内存，并针对独立的控制和内存接口进行了优化。这允许硬件与节点的内存复合体紧密耦合甚至集成，消除任何性能障碍。IBA 足够灵活，也可以作为二阶网络实现，以支持传统和迁移场景。即使作为二阶网络实现，IBA 的内存优化操作也能实现最大可用带宽利用率并提高 CPU 效率。
+
+1.3 范围
+
+IBA 支持从作为单个主机的背板互连到由多个独立和集群化的主机及 I/O 组件组成的复杂系统域网络的一系列应用。
+
+对于单主机环境，如图 2 所示，每个 IBA Fabric 充当其主机的专用 I/O 互连，并提供主机的 CPU/内存复合体与多个 I/O 模块之间的连接。在这种环境中，所有设备都专用于该主机。
+
+图 2  单主机环境
+
+[图注：图中展示了一个处理器节点（含 CPU、内存、HCA）通过交换机连接到一个 I/O 机箱，其中包含多个 TCA I/O 模块，连接到 SCSI、以太网、光纤通道集线器及设备、图形和视频设备。]
+
+在另一端是如图 1 所示的多主机连接。这里，单个 Fabric 甚至多个 Fabric 互连众多主机和各种 I/O 单元。某些主机可能共享 I/O 设备，而其他主机则不共享。主机之间的进程间通信成为一个非常重要的目标。简单的 Fabric 管理不再足够，因为网络管理员需要额外的功能来维护隔离并确保确定性行为。
+
+该体系结构不仅指定了 I/O 和进程间通信的机制，还指定了一套广泛的管理机制，这些机制足够灵活，既能在不产生过度负担和昂贵的 Fabric 管理器的情况下支持单主机环境，同时又能支持非常复杂的系统域网络 (SAN) 和功能丰富的 Fabric 管理。
+
+1.4 文档组织
+
+1.4.1 卷册系列
+
+InfiniBand 规范性规范套件由两卷组成：
+
+卷 1 —— 规定了核心 InfiniBand™ 体系结构。它提供了交换机、路由器、处理器节点的主机通道适配器、I/O 设备的目标通道适配器和管理方面 IBA 操作所需的规范性信息。
+
+卷 2 —— 规定了电气和机械配置。它规定了多种不同物理介质和信令速率的要求，定义了机械外形尺寸，并规定了物理和机箱管理要求。
+
+1.4.2 卷 1 组织
+
+1.5 文档约定
+
+1.5.1 字节序
+
+本规范使用大端 (Big Endian) 字节序。对于大于一个字节的字段，这意味着每个字段的最高有效字节首先传输，如图 3 所示。
+
+除非另有特别说明，本文档中的文本按传输顺序列出字段。在大多数情况下，多字节字段对齐到以 32 位边界开始或结束。为清晰起见，某些图以 32 位字为单位显示字段。这些字采用大端格式，针对小端处理的实现需要特别注意字节序以确保正确操作，因为小端处理倾向于将最低有效字节放在较低的字节偏移处。
+
+字节偏移    前一字段
++0          最高有效字节
++1          第二高有效字节
+.
+.
+.
++n          最低有效字节
+
+图 3  多字节字段的字节序
+
+图 4 说明了数值和位有效字段应如何解释。
+
+具有非字节粒度的位字段遵循相同的规则——即，字段的最高有效位占据最低字节偏移的高位，最低有效位在最低字节偏移中，如图 5 所示。
+
+图 4  字节序示例
+
+[表格：展示了在大端字节序下，16 位、32 位、24 位、48 位、64 位和 128 位字段在字节偏移 0-51 范围内的位布局。每 4 字节一行，列为 Byte 0,4,8...、Byte 1,5,9...、Byte 2,6,10...、Byte 3,7,11...。]
+
+图 5  位序示例
+
+[表格：展示了非字节对齐位字段的布局示例：
+- 5 位字段 (b4-b0) + 3 位字段 (b2-b0) + 2 位字段 (b1-b0) + 6 位字段 (b5-b0)
+- 4 位字段 (b3-b0) + 12 位字段 (b11-b0)
+- 14 位字段 (b13-b0) + 2 位字段 (b1-b0)]
+
+1.5.2 数值
+
+除非另有说明，不带限定符的数值为十进制。本文档使用以下限定符：
+
+• 0x 前缀表示十六进制值（例如 0x15F7）
+• b' 前缀表示二进制值（例如 b'0110）
+
+一个明显的例外是图和表中使用的二进制数。
+
+在表头中，冒号用于指定位的范围（例如 Bits 7:0），该列中的表值为二进制数。
+
+两个数字之间的短横线表示范围（例如 0-3 = 零到三）。
+
+全局 ID 是 128 位的值，以如下格式指定：
+        value:value:value:value:value:value:value:value
+其中每个 value 代表一个 4 位十六进制数（例如 FF02:0:0:0:0:0:0:1）。
+
+1.6 免责声明
+
+与任何文档一样，本规范可能会因正确性、清晰度和增强而进行勘误修订。InfiniBand™ 贸易协会在 http://www.InfiniBandTA.org 托管了一个网站。请访问该网站以检查本规范的勘误和更新。

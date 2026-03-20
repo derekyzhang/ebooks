@@ -1,0 +1,767 @@
+第二章：术语表
+
+Active（主动）
+描述发起通信建立请求的实体（例如 TCP CONNECT）。
+
+Address Handle（地址句柄）
+一个对象，包含通过不可靠数据报（Unreliable Datagram）服务向远程端口发送消息所需的信息。
+
+Address Vector（地址向量）
+一组地址和路径信息的集合，指定远程端口以及与其通信时要使用的参数。
+
+AETH
+确认扩展传输头部（Ack Extended Transport Header）。
+
+AM
+属性修饰符（Attribute Modifier）。
+
+Asynchronous error（异步错误）
+一种永久性错误，无法通过本地端的即时或完成错误处理机制报告。异步错误可以是非关联的，也可以与特定的完成队列（Completion Queue）、端端口（Endport）或队列对（Queue Pair）关联。
+
+Attribute（属性）
+管理数据报（Management Datagram）中携带的管理数据集合。
+
+Automatic Path Migration（自动路径迁移）
+通道适配器（Channel Adapter）在每个队列对（Queue Pair）的基础上，向另一个 CA 发出信号以触发路径迁移（Path Migration）到预设备用路径的过程。自动路径迁移使用请求或响应数据包中的一个位（MigReq）来通知另一个通道适配器迁移到预定义的备用路径。
+
+B_Key
+参见基板管理密钥（Baseboard Management Key）。
+
+Base LID（基本 LID）
+引用端口的数值最低的本地标识符（Local Identifier）。基本 LID 的路径位（Path Bits）始终为零。
+
+Base Switch Port 0（基本交换机端口 0）
+非端端口（Endport）的交换机端口 0（Switch Port 0）。
+
+Baseboard Managed Unit（基板被管理单元）
+通过 InfiniBand™ 链路上的基板方法 MAD 操作提供 InfiniBand™ 规范定义的自身信息的任何单元。
+
+Baseboard Management Key（基板管理密钥）
+IBA 管理数据报中包含的一种构造，用于认证发送方是否被允许执行所请求的操作。
+
+Binding（绑定）
+将指定内存区域（Memory Region）中的虚拟地址范围与内存窗口（Memory Window）关联的行为。
+
+BTH
+基本传输头部（Base Transport Header）。
+
+CA
+参见通道适配器（Channel Adapter）。
+
+Channel（通道）
+两个队列对之间为通信而建立的关联。
+
+Channel Adapter（通道适配器）
+终结链路并执行传输层功能的设备。为主机通道适配器（Host Channel Adapter）或目标通道适配器（Target Channel Adapter）之一。
+
+Channel Interface（通道接口）
+通过主机通道适配器（Host Channel Adapter）、关联固件和设备驱动程序软件的组合实现的，向动词消费者（Verbs Consumer）呈现的通道。
+
+Channel, Reliable Datagram（通道，可靠数据报）
+参见可靠数据报通道（Reliable Datagram Channel）。
+
+CI
+参见通道接口（Channel Interface）。
+
+Client（客户端）
+主动/被动通信建立交换中的主动实体。
+
+CM
+参见通信管理器（Communication Manager）。
+
+CME
+机箱管理实体（Chassis Management Entity）。
+
+Communication Manager（通信管理器）
+支持通信管理机制和协议的软件、硬件或两者的组合。
+
+Completion Error（完成错误）
+通过完成状态报告的永久性接口或处理错误。
+
+Completion Event Handler（完成事件处理程序）
+当消费者（Consumer）请求完成通知并且一个条目被添加到与该处理程序标识符关联的完成队列时被调用的处理程序。
+
+Completion Queue（完成队列）
+包含一个或多个完成队列条目（Completion Queue Entry）的队列。完成队列在通道接口内部，对动词消费者不可见。
+
+Completion Queue Entry（完成队列条目）
+工作完成（Work Completion）的通道接口内部表示。
+
+Component Mask（组件掩码）
+管理数据报（Management Datagram）中的一个字段，用于指示在执行操作时应考虑 MAD 的哪些组件。参见通配（Wildcarding）。
+
+Connection（连接）
+一对实体（例如进程）之间通过一个或多个通道（Channel）建立的关联。
+
+Consumer（消费者）
+参见动词消费者（Verbs Consumer）。
+
+CQE
+完成队列条目（Completion Queue Entry），通常发音为"cookie"。
+
+CRC
+循环冗余校验（Cyclic Redundancy Check）。
+
+Data Payload（数据载荷）
+一个数据包中携带的数据，不包括任何控制或头部信息。
+
+Data Segment（数据段）
+工作请求（Work Request）中的一个元组，指定一个供主机通道适配器（Host Channel Adapter）访问的虚拟连续缓冲区。每个数据段由一个虚拟地址、一个关联的本地密钥（Local Key）或远程密钥（Remote Key）以及一个长度组成。
+
+DETH
+数据报扩展传输头部（Datagram Extended Transport Header）。
+
+DGID
+目的全局标识符（Destination Global Identifier）。
+
+DLID
+目的本地标识符（Destination Local Identifier）。
+
+EEC
+参见端到端上下文（End to End Context）。
+
+EECN
+参见端到端上下文编号（End to End Context Number）。
+
+EE Context
+参见端到端上下文（End to End Context）。
+
+Endport（端端口）
+一个端口，可以作为与发送方处于同一子网（Subnet）内的 LID 路由通信的目的地。子网上所有通道适配器（Channel Adapter）端口都是该子网的端端口，子网中每个交换机（Switch）的端口 0 也是如此。端口 0 以外的交换机端口不能是端端口。当不加限定地使用"端口"时，在上下文表明它是通信目的地的情况下，可假定其含义为端端口。
+
+End to End Context（端到端上下文）
+可靠数据报通道的端点。
+
+End to End Context Number（端到端上下文编号）
+标识通道适配器（Channel Adapter）内特定端到端上下文的编号。
+
+End to End Flow Control（端到端流控制）
+一种防止发送方在接收方未提交接收缓冲区期间发送消息的机制。
+
+Enhanced Switch Port 0（增强交换机端口 0）
+提供目标通道适配器（Target Channel Adapter）功能的交换机端口 0（Switch Port 0）。
+
+External Switch Port（外部交换机端口）
+交换机（Switch）上的物理端口。另参见交换机端口 0（Switch Port 0）。
+
+Fabric
+连接一组通道适配器（Channel Adapter）的链路、交换机（Switch）和路由器（Router）的集合。
+
+Fast Register Physical MR（快速注册物理内存区域）
+通过发送工作请求（Post Send Work Request）在现有本地 L_Key 及任何关联的 R_Key 上执行的内存注册。
+
+Fast Register PMR
+快速注册物理内存区域（Fast Register Physical MR）。
+
+Gb/s
+千兆位每秒（10⁹ 位每秒）。
+
+GB/s
+千兆字节每秒（10⁹ 字节每秒）。
+
+General Service Interface（通用服务接口）
+提供子网管理以外的管理服务（例如连接、性能、诊断）的接口。
+
+GID
+参见全局标识符（Global Identifier）。
+
+GID Index 0（GID 索引 0）
+通过端端口 GID 表（GID Table）索引 0 引用的单播 GID，基于端端口的不变的制造商分配的 EUI-64。
+
+GID Table（GID 表）
+包含一个或多个全局标识符（Global Identifier）的表，端端口可通过这些标识符被引用。
+
+Global Identifier（全局标识符）
+用于标识端端口（Endport）或多播组的 128 位标识符。GID 是有效的 128 位 IPv6 地址（根据 RFC 2373），并在 IBA 中定义了额外的属性/限制，以便于高效发现、通信和路由。
+
+Global Route Header（全局路由头部）
+InfiniBand™ 体系结构数据包中存在的路由头部，用于发往发送方本地子网之外的目的地的数据包。
+
+Globally Unique Identifier（全局唯一标识符）
+唯一标识设备或组件的编号。
+
+GMP
+通用管理数据包（General Management Packet）。
+
+GRH
+参见全局路由头部（Global Route Header）。
+
+GSI
+参见通用服务接口（General Service Interface）。
+
+GUID
+参见全局唯一标识符（Globally Unique Identifier）。
+
+HCA
+参见主机通道适配器（Host Channel Adapter）。
+
+Host（主机）
+由单个内存/CPU 复合体管辖的一个或多个主机通道适配器（Host Channel Adapter）。
+
+Host Channel Adapter（主机通道适配器）
+支持动词（Verbs）接口的通道适配器（Channel Adapter）。
+
+IBA
+InfiniBand™ 体系结构。
+
+IB-ML
+InfiniBand™ 管理链路（InfiniBand™ Management Link）。
+
+ICRC
+参见不变 CRC（Invariant CRC）。
+
+Immediate Data（立即数据）
+工作队列元素（Work Queue Element）中包含的数据，随载荷一起发送到远程通道适配器（Channel Adapter），并放置在接收工作完成（Receive Work Completion）中。
+
+Immediate Error（即时错误）
+通过动词状态报告的永久性接口错误（Interface Error）。
+
+Initiator（发起者）
+请求的来源。
+
+Interface Error（接口错误）
+由工作请求（Work Request）中无效字段导致的错误。
+
+Invalid Key（无效密钥）
+参见密钥（Key）。
+
+Invalidate Operation（无效化操作）
+禁用 CI 通过 L_Key 或 R_Key 访问主机内存的操作，但保留 L_Key 或 R_Key 的转换和保护资源以供将来的内存注册使用。
+
+Invariant CRC（不变 CRC）
+覆盖数据包中从源到目的地不发生变化的字段的 CRC。
+
+I/O
+输入/输出。
+
+I/O Controller（I/O 控制器）
+I/O 单元（I/O Unit）的两个体系结构划分之一。I/O 控制器（IOC）提供 I/O 服务，而目标通道适配器（Target Channel Adapter）提供传输服务。
+
+I/O Unit（I/O 单元）
+I/O 单元（IOU）提供 I/O 服务。I/O 单元由通过单个目标通道适配器（Target Channel Adapter）连接到 Fabric 的一个或多个 I/O 控制器（I/O Controller）组成。
+
+I/O Virtual Address（I/O 虚拟地址）
+对主机处理器没有直接意义的地址，仅用于向主机通道适配器（Host Channel Adapter）描述本地或远程内存缓冲区。
+
+IOC
+参见 I/O 控制器（I/O Controller）。
+
+IOU
+参见 I/O 单元（I/O Unit）。
+
+IPv6
+互联网协议第 6 版（Internet Protocol, version 6）。
+
+IPv6 Address（IPv6 地址）
+根据 IETF RFC 2460 构建的 128 位地址。
+
+Key（密钥）
+用于限制对一个或多个资源的访问的构造，类似于密码。InfiniBand™ 体系结构定义了以下密钥：
+    基板管理密钥（Baseboard Management Key）
+    本地密钥（Local Key）
+    管理密钥（Management Key）
+    队列密钥（Queue Key）
+    分区密钥（Partition Key）
+    远程密钥（Remote Key）
+
+Key Space（密钥空间）
+指特定内存区域（Memory Region）的 L_Key 和 R_Key 的索引部分是否具有相同的值。如果相同，则它们处于同一密钥空间。否则它们处于不同的密钥空间。
+
+L_Key
+参见本地密钥（Local Key）。
+
+LID
+参见本地标识符（Local Identifier）。
+
+LID Mask Control（LID 掩码控制）
+由子网管理器（Subnet Manager）分配的每端口值。LMC 的值指定本地标识符（Local Identifier）中路径位（Path Bits）的数量。
+
+Link（链路）
+任意两个网络 Fabric 元素（如通道适配器或交换机）之间的全双工传输路径。
+
+LMC
+参见 LID 掩码控制（LID Mask Control）。
+
+Local Identifier（本地标识符）
+由子网管理器（Subnet Manager）分配给端口的地址，在子网内唯一，用于在子网内引导数据包。源 LID 和目的 LID 存在于本地路由头部（Local Route Header）中。本地标识符由基本 LID（Base LID）与路径位（Path Bits）值之和构成。
+
+Local Invalidate（本地无效化）
+通过发送队列（Send Queue）执行的无效化操作（Invalidate Operation）：作用于与内存区域（MR）关联的本地 L_Key、R_Key 或内存区域句柄（Memory Region Handle）；或与类型 2 内存窗口（Type 2 Memory Window）关联的 R_Key 或内存窗口句柄（Memory Window Handle）。
+
+Local Key（本地密钥）
+由动词创建的不透明对象，引用内存注册（Memory Registration），与虚拟地址一起使用以描述 HCA 硬件访问本地内存的授权。它也可被 HCA 硬件用于标识适当的页表，以将虚拟地址转换为物理地址。
+
+Local Route Header（本地路由头部）
+所有 InfiniBand™ 体系结构数据包中存在的路由头部，用于在子网内通过交换机进行路由。
+
+Local Subnet（本地子网）
+连接特定子网的通道适配器（Channel Adapter）的链路和交换机（Switch）的集合。
+
+LRH
+参见本地路由头部（Local Route Header）。
+
+M_Key
+参见管理密钥（Management Key）。
+
+MAD
+参见管理数据报（Management Datagram）。
+
+Managed Unit（被管理单元）
+向外部实体提供关键产品数据（Vital Product Data）并由该实体管理的单元。
+
+Management Datagram（管理数据报）
+指用于 HCA、交换机、路由器和 TCA 之间管理 Fabric 的不可靠数据报（Unreliable Datagram）数据包的内容。InfiniBand™ 体系结构描述了多种此类管理命令的格式。
+
+Management Key（管理密钥）
+IBA 管理数据报中包含的一种构造，用于向接收方认证发送方。
+
+Maximum Transfer Unit（最大传输单元）
+最大数据包载荷（Packet Payload）大小，可以是 256、512、1024、2048 或 4096 字节。另参见 MTU 容量（MTU Capacity）、邻居 MTU（Neighbor MTU）和路径最大传输单元（Path Maximum Transfer Unit）。
+
+MB/s
+兆字节每秒（10⁶ 字节每秒）。
+
+Memory Protection Attributes（内存保护属性）
+授予内存区域（Memory Region）的访问权限。
+
+Memory Region（内存区域）
+消费者地址空间内已注册的、任意大小的虚拟连续区域，使 HCA 能够进行本地访问和可选的远程访问。参见内存注册（Memory Registration）。
+
+Memory Region Handle（内存区域句柄）
+消费者注册内存区域（Memory Region）时返回给消费者的不透明对象。内存区域句柄用于向内存管理动词指定已注册的区域。
+
+Memory Registration（内存注册）
+注册主机内存区域（Memory Region）以供消费者使用的行为。内存注册操作返回一个内存区域句柄（Memory Region Handle）。进程将此句柄与内存区域内虚拟地址的任何引用一起提供。
+
+Memory Window（内存窗口）
+一种已分配的资源，在绑定到现有内存区域（Memory Region）内的指定区域后启用远程访问。每个内存窗口都有一个关联的窗口句柄（Window Handle）、一组访问权限和当前 R_Key。
+
+Message（消息）
+两个或多个通道适配器（Channel Adapter）之间的信息传输，由一个或多个数据包组成。
+
+Message-Level Flow Control（消息级流控制）
+参见端到端流控制（End to End Flow Control）。
+
+Message Sequence Number（消息序列号）
+响应方作为确认的一部分返回给请求方的值，指示最后完成的消息。与数据包序列号（Packet Sequence Number）对比。
+
+Modifiers（修饰符）
+在动词定义中，指定动词如何执行以及作用于什么对象的输入和输出对象列表。
+
+MR
+内存区域（Memory Region）。
+
+MSN
+参见消息序列号（Message Sequence Number）。
+
+MTU
+参见最大传输单元（Maximum Transfer Unit）。
+
+MTUCap
+参见 MTU 容量（MTU Capacity）。
+
+MTU Capacity（MTU 容量）
+端口可以支持的最大传输单元（Maximum Transfer Unit）的最大值。
+
+Multicast（多播）
+一种机制，发送到单个地址的数据包可以被传递到多个端口。
+
+Multicast Identifier（多播标识符）
+多播组（Multicast Group）的本地标识符（Local Identifier）或全局标识符（Global Identifier）。
+
+Multicast Group（多播组）
+接收发送到单个地址的多播（Multicast）数据包的端端口（Endport）集合。
+
+MW
+内存窗口（Memory Window）。
+
+Neighbor MTU（邻居 MTU）
+端口的已配置最大传输单元（Maximum Transfer Unit），该值指定可以发送到链路（Link）另一端端口或从其接收的最大数据包载荷。
+
+NQ
+通知队列（Notification Queue）。
+
+Out-of-band Management（带外管理）
+通过 InfiniBand™ Fabric 以外的传输方式传递的管理消息。
+
+Outstanding（未完成）
+1) 工作请求（Work Request）在已提交到工作队列（Work Queue）但消费者尚未检索工作完成（Work Completion）之前的状态。
+2) 数据包已发送到 Fabric 但尚未被确认的状态。
+
+P_Key
+参见分区密钥（Partition Key）。
+
+Packet（数据包）
+IBA 数据传输和路由的不可分割单元，由一个或多个头部、数据包载荷（Packet Payload）以及一个或两个 CRC 组成。
+
+Packet Payload（数据包载荷）
+数据包中位于任何传输头部与数据包末尾的 CRC 之间（不包括二者）的部分。数据包载荷最多包含 4096 字节。
+
+Packet Sequence Number（数据包序列号）
+基本传输头部（Base Transport Header）中携带的值，允许检测和重新发送丢失的数据包。
+
+Partition（分区）
+允许彼此通信的通道适配器（Channel Adapter）端口的集合。端口可以同时是多个分区的成员。不同分区中的端口在尽可能的范围内不知道彼此的存在。
+
+Partition Key（分区密钥）
+数据包中携带的并存储在通道适配器（Channel Adapter）中的值，用于确定分区成员身份。
+默认分区密钥（Default Partition Key）：提供默认分区完全成员资格的分区密钥特殊值。参见分区成员资格类型（Partition Membership Type）。
+无效分区密钥（Invalid Partition Key）：指示分区密钥表（Partition Key Table）条目不包含有效密钥的特殊值。
+
+Partition Key Table（分区密钥表）
+每个端口中存在的分区密钥表。
+
+Partition Key Table Index（P_Key_ix，分区密钥表索引）
+分区密钥表中的索引。
+
+Partition Manager（分区管理器）
+管理分区密钥和成员资格的实体。
+
+Partition Membership Type（分区成员资格类型）
+分区密钥的高位用于记录端口分区表中的成员资格类型：0 为受限（Limited），1 为完全（Full）。受限成员不能接受其他受限成员的信息，但其他每种成员资格类型组合之间的通信是允许的。
+
+Passive（被动）
+描述等待接收通信建立请求的实体（例如 TCP LISTEN）。
+
+Path（路径）
+消息从源通道适配器（Channel Adapter）到目的通道适配器所经过的链路、交换机和路由器的集合。在子网内，路径由元组 <SLID, DLID, SL> 定义。
+
+Path Bits（路径位）
+本地标识符（Local Identifier）中可以被改变以变更到特定端口的子网内路径的部分。如果路径位为零，则本地标识符等于基本 LID（Base LID）。适用于特定端口的路径位数量由子网管理器（Subnet Manager）通过 LID 掩码控制（LID Mask Control）值指定。
+
+Path Maximum Transfer Unit（路径最大传输单元）
+从源到目的地的路径（Path）上支持的最大传输单元（Maximum Transfer Unit）。PMTU 以载荷大小描述，可以是 256、512、1024、2048 或 4096 字节。
+
+Path Migration（路径迁移）
+对连接所使用的路径的修改。
+
+PD
+参见保护域（Protection Domain）。
+
+Peer（对等方）
+1) 主动/主动连接建立交换中的一个代理。
+2) 连接另一端实体的通用术语。
+
+Pinning memory（锁定内存）
+操作系统提供的一种功能，强制内存区域驻留并从 HCA 的角度保持虚拟到物理地址的转换不变。
+
+PM
+参见分区管理器（Partition Manager）。
+
+PMR
+物理内存区域（Physical Memory Region）。
+
+PMTU
+参见路径最大传输单元（Path Maximum Transfer Unit）。
+
+Port（端口）
+通道适配器（Channel Adapter）或交换机（Switch）上链路连接的位置。单个通道适配器上可以有多个端口，每个端口具有不同的上下文信息需要维护。交换机/交换元素根据定义包含多个端口。
+
+Post（提交）
+将工作请求（Work Request）放置到工作队列（Work Queue）上。
+
+Private Data（私有数据）
+通信管理消息中存在的一个字段，在所有 IBA 层中是不透明的。消费者可以使用此字段在 CM 消息交换中"捎带"额外信息。
+
+Processing Error（处理错误）
+当主机通道适配器（Host Channel Adapter）正在执行工作队列元素（Work Queue Element）描述的工作单元时发生的错误，由于传输协议返回的错误而无法成功完成请求。
+
+Protection Domain（保护域）
+用于关联队列对（Queue Pair）、地址句柄（Address Handle）、内存窗口（Memory Window）和内存区域（Memory Region）的机制。
+
+PSN
+参见数据包序列号（Packet Sequence Number）。
+
+Q_Key
+参见队列密钥（Queue Key）。
+
+QoS
+参见服务质量（Quality of Service）。
+
+QP
+参见队列对（Queue Pair）。
+
+Quality of Service（服务质量）
+预测给定网络连接的行为、可靠性、速度和延迟的指标。
+
+Queue Key（队列密钥）
+用于验证远程发送方访问不可靠数据报（Unreliable Datagram）和可靠数据报（Reliable Datagram）服务类型的本地接收队列（Receive Queue）权限的构造。如果传入数据包中的 Q_Key 与接收 QP 中存储的值不匹配，则该数据包应被丢弃。
+
+Queue Pair（队列对）
+由一个发送工作队列（Send Work Queue）和一个接收工作队列（Receive Work Queue）组成。发送和接收队列始终作为一对创建，并在其整个生命周期内保持这种关系。队列对由其队列对编号（Queue Pair Number）标识。
+
+Queue Pair Context（队列对上下文）
+与特定队列对（Queue Pair）相关的信息，如当前的工作队列元素（Work Queue Element）、数据包序列号（Packet Sequence Number）、传输参数等。
+
+Queue Pair Handle（队列对句柄）
+引用特定队列对（Queue Pair）的不透明对象。队列对句柄由创建 QP 的操作返回，并作为其他 QP 操作的标识参数提供。
+
+Queue Pair Number（队列对编号）
+标识通道适配器（Channel Adapter）内特定队列对（Queue Pair）的编号。
+
+R_Key
+参见远程密钥（Remote Key）。
+
+Raw Datagram（原始数据报）
+包含 IBA 本地路由头部（Local Route Header）、可能包含 IBA 全局路由头部（Global Route Header）、但不包含 IBA 传输头部的数据包，不由 IBA 传输服务处理。
+
+RC
+参见可靠连接（Reliable Connection）。
+
+RD
+参见可靠数据报（Reliable Datagram）。
+
+RDC
+参见可靠数据报通道（Reliable Datagram Channel）。
+
+RDD
+参见可靠数据报域（Reliable Datagram Domain）。
+
+RDETH
+可靠数据报扩展传输头部（Reliable Datagram Extended Transport Header）。
+
+RDMA
+参见远程直接内存访问（Remote Direct Memory Access）。
+
+Receive Queue（接收队列）
+队列对（Queue Pair）关联的两个队列之一。接收队列包含描述传入数据放置位置的工作队列元素（Work Queue Element）。
+
+Region Handle（区域句柄）
+参见内存区域句柄（Memory Region Handle）。
+
+Registered Memory（已注册内存）
+已经过内存注册（Memory Registration）的内存区域。
+
+Registration（注册）
+参见内存注册（Memory Registration）。
+
+Registered memory region（已注册内存区域）
+参见内存区域（Memory Region）。
+
+Reliable Connection（可靠连接）
+一种传输服务类型（Transport Service Type），其中一个队列对（Queue Pair）仅与另一个 QP 关联，使得一个 QP 的发送队列发送的消息被可靠地传递到另一个 QP 的接收队列。因此，每个 QP 被称为与对端 QP "连接"。
+
+Reliable Datagram（可靠数据报）
+一种传输服务类型（Transport Service Type），其中一个队列对（Queue Pair）可以通过可靠数据报通道（Reliable Datagram Channel）与多个其他 QP 通信。RD QP 的发送队列发送的消息将被可靠地传递到关联工作请求（Work Request）中指定的 QP 的接收队列。尽管名称如此，可靠数据报消息不限于单个数据包。
+
+Reliable Datagram Channel（可靠数据报通道）
+两个可靠数据报（Reliable Datagram）端到端上下文（End to End Context）的关联。可靠数据报通道可以多路复用来自多个 RD 队列对的可靠数据报。
+
+Reliable Datagram Domain（可靠数据报域）
+定义哪些可靠数据报（Reliable Datagram）队列对（Queue Pair）可以使用端到端上下文（End to End Context）的关联。
+
+Reliable Multi-Packet Protocol（可靠多包协议）
+基于管理数据报（Management Datagram）的事务协议，支持可靠传输超过单个管理数据报容量的数据量。
+
+Remote Direct Memory Access（远程直接内存访问）
+访问远程系统内存而不中断该系统 CPU 处理的方法。
+
+Remote Invalidate（远程无效化）
+通过传入的带无效化发送消息（Send with Invalidate Message）对本地 R_Key 执行的无效化操作（Invalidate Operation）。
+
+Remote Key（远程密钥）
+由动词创建的不透明对象，引用内存区域（Memory Region）或内存窗口（Memory Window），与虚拟地址一起使用以描述远程设备访问本地内存的授权。它也可被 HCA 硬件用于标识适当的页表，以将虚拟地址转换为物理地址。
+
+Reserved L_Key（保留 L_Key）
+特权消费者（Consumer）可以使用的 L_Key，为 HCA 提供对主机物理地址的直接访问。
+
+Retired（已退休）
+工作队列元素（Work Queue Element）在主机通道适配器（Host Channel Adapter）完成 WQE 指定的操作之后、但在工作完成（Work Completion）呈现给消费者之前的状态。
+
+RMPP
+参见可靠多包协议（Reliable Multi-Packet Protocol）。
+
+RNR Nak
+接收方未就绪（Receiver Not Ready）。表示接收方当前无法接受请求但将来可能能够接受的响应。
+
+Router（路由器）
+在 IBA 子网之间传输数据包的设备。
+
+SA
+参见子网管理（Subnet Administration）。
+
+SAR
+分段与重组（Segmentation and Re-assembly）。
+
+Send Queue（发送队列）
+队列对（Queue Pair）的两个队列之一。发送队列包含描述要传输的数据的 WQE。
+
+Server（服务器）
+1) 连接建立交换中的被动实体。
+2) 响应客户端请求提供服务的实体（例如进程）。
+
+Service ID（服务 ID）
+允许通信管理器（Communication Manager）将传入的连接请求与提供服务的实体关联的值。服务 ID 类似于 TCP 端口号。
+
+Service Level（服务级别）
+本地路由头部（Local Route Header）中标识数据包适当虚拟通道（Virtual Lane）的值，实现差异化服务。虽然特定服务级别的适当 VL 可能在数据包的路径（Path）上不同，但服务级别保持不变。
+
+Service Type（服务类型）
+参见传输服务类型（Transport Service Type）。
+
+Signaled Completion（信号完成）
+用于提交到发送队列（Send Queue）的工作请求（Work Request）的修饰符，指定当所请求的工作完成（无论成功还是出错）时应生成工作完成（Work Completion）。
+
+SGID
+源全局标识符（Source Global Identifier）。
+
+Shared Receive Queue（共享接收队列）
+共享接收队列包含可用于在与该共享接收队列关联的任何 QP 上接收传入数据的 WQE。
+
+SLID
+源本地标识符（Source Local Identifier）。
+
+SL
+参见服务级别（Service Level）。
+
+SM
+参见子网管理器（Subnet Manager）。
+
+SMA
+参见子网管理代理（Subnet Management Agent）。
+
+SMP
+参见子网管理数据包（Subnet Management Packet）。
+
+Solicited Event（请求事件）
+一种机制，消息发送方可以在消息被接收时在接收方生成事件。
+
+SRQ
+共享接收队列（Shared Receive Queue）。
+
+Subnet（子网）
+一组 InfiniBand™ 体系结构端口及其关联链路，具有共同的子网 ID 并由共同的子网管理器（Subnet Manager）管理。子网可以通过路由器相互连接。
+
+Subnet Administration（子网管理）
+实现查询和操作子网管理数据接口的体系结构构造。
+
+Subnet Manager（子网管理器）
+参与子网配置和控制的若干实体之一。
+主子网管理器（Master Subnet Manager）：具有权威性的子网管理器，拥有子网的参考配置信息。
+备用子网管理器（Standby Subnet Manager）：当前处于静默状态、不担任主 SM 角色的子网管理器，由主 SM 代理。备用 SM 是休眠管理器。
+
+Subnet Management Agent（子网管理代理）
+存在于所有 IBA 通道适配器（Channel Adapter）和交换机（Switch）中的实体，处理来自子网管理器（Subnet Manager）的子网管理数据包（Subnet Management Packet）。
+
+Subnet Management Data（子网管理数据）
+子网管理器（Subnet Manager）所需的关键产品数据（Vital Product Data）。
+
+Subnet Management Packet（子网管理数据包）
+用于管理子网的管理数据报（Management Datagram）子类。SMP 专门通过虚拟通道（Virtual Lane）15 传输，并专门寻址到队列对编号（Queue Pair Number）0。
+
+Switch（交换机）
+使用本地路由头部（Local Route Header）中的目的本地标识符（Destination Local Identifier）字段，将数据包从同一子网（Subnet）的一条链路路由到另一条链路的设备。
+
+Switch Management Port（交换机管理端口）
+可以管理交换机（Switch）的虚拟端口。参见交换机端口 0（Switch Port 0）。
+
+Switch Port 0（交换机端口 0）
+可以管理交换机（Switch）的可寻址虚拟端口。可以是基本交换机端口 0（Base Switch Port 0）或端端口（Endport）之一。
+
+TCA
+参见目标通道适配器（Target Channel Adapter）。
+
+Target Channel Adapter（目标通道适配器）
+通常用于支持 I/O 设备的通道适配器（Channel Adapter）。TCA 不要求支持动词（Verbs）接口。另参见 I/O 单元（I/O Unit）。
+
+Transport Service Type（传输服务类型）
+描述通信通道适配器（Channel Adapter）之间将使用的可靠性、排序、消息大小和操作类型。
+使用 IBA 传输的传输服务类型：
+    • 可靠连接（Reliable Connection）
+    • 不可靠连接（Unreliable Connection）
+    • 可靠数据报（Reliable Datagram）
+    • 不可靠数据报（Unreliable Datagram）
+原始数据报（Raw Datagram）服务不使用 IBA 传输。
+
+Type 1 Memory Window（类型 1 内存窗口）
+通过 PD 与 QP 关联且不能被无效化的内存窗口（Memory Window）。
+
+Type 2 Memory Window（类型 2 内存窗口）
+类型 2A 内存窗口（Type 2A Memory Window）或类型 2B 内存窗口（Type 2B Memory Window）之一的内存窗口。
+
+Type 2A Memory Window（类型 2A 内存窗口）
+绑定时通过 QP 编号与 QP 关联且可以被无效化的内存窗口（Memory Window）。
+
+Type 2B Memory Window（类型 2B 内存窗口）
+绑定时通过 QP 编号和 PD 与 QP 关联且可以被无效化的内存窗口（Memory Window）。
+
+UC
+参见不可靠连接（Unreliable Connection）。
+
+UD
+参见不可靠数据报（Unreliable Datagram）。
+
+Unicast（单播）
+单个端口的标识符。发送到单播地址的数据包被传递到该地址标识的端口。
+
+Unit（单元）
+通过一个或多个通道适配器连接到 Fabric 的一组或多组进程和/或功能。参见主机（Host）和 I/O 单元（I/O Unit）。
+
+Unreliable Connection（不可靠连接）
+一种传输服务类型（Transport Service Type），其中一个队列对（Queue Pair）仅与另一个 QP 关联，使得一个 QP 的发送队列发送的消息（如果被传递）被传递到另一个 QP 的接收队列。因此，每个 QP 被称为与对端 QP "连接"。有错误的消息不会被传输层重试，错误处理必须由更高层协议提供。
+
+Unreliable Datagram（不可靠数据报）
+一种传输服务类型（Transport Service Type），其中一个队列对（Queue Pair）可以向/从任何其他 QP 发送和接收单包消息。不保证排序和传递，已传递的数据包可能被接收方丢弃。
+
+Unsignaled Completion（非信号完成）
+用于提交到发送队列（Send Queue）的工作请求（Work Request）的修饰符，指定仅当所请求的操作以错误完成时才生成工作完成（Work Completion）。
+
+Variant CRC（可变 CRC）
+覆盖数据包所有字段（包括可能被交换机（Switch）更改的字段）的 CRC。
+
+VCRC
+参见可变 CRC（Variant CRC）。
+
+Verbs（动词）
+主机通道适配器（Host Channel Adapter）功能的抽象描述。操作系统可以通过其编程接口公开部分或全部动词功能。
+
+Verbs Consumer（动词消费者）
+动词（Verbs）的直接使用者。
+
+Virtual Lane（虚拟通道）
+在同一物理链路上提供独立数据流的方法。
+
+Vital Product Data（关键产品数据）
+支持管理功能的设备特定数据。
+
+VL
+参见虚拟通道（Virtual Lane）。
+
+VPD
+参见关键产品数据（Vital Product Data）。
+
+WC
+参见工作完成（Work Completion）。
+
+Wildcarding（通配）
+将管理数据报（Management Datagram）中的组件掩码（Component Mask）位设置为 0，导致该组件的值在执行操作时被忽略。并非所有管理类都定义了组件掩码，组件掩码仅适用于某些方法-属性组合。具有组件掩码的管理类的一个示例是 SubnAdm。
+
+Window Handle（窗口句柄）
+标识内存窗口（Memory Window）的不透明对象。
+
+Work Completion（工作完成）
+完成队列条目（Completion Queue Entry）的消费者可见表示。当消费者轮询完成队列（Completion Queue）时可以获得工作完成。
+
+Work Queue（工作队列）
+发送队列（Send Queue）或接收队列（Receive Queue）之一。
+
+Work Queue Element（工作队列元素）
+主机通道适配器（Host Channel Adapter）对工作请求（Work Request）的内部表示。消费者无法直接访问工作队列元素。
+
+Work Queue Pair（工作队列对）
+参见队列对（Queue Pair）。
+
+Work Request（工作请求）
+消费者请求创建工作队列元素（Work Queue Element）的手段。
+
+WQ
+参见工作队列（Work Queue）。
+
+WQE
+工作队列元素（Work Queue Element），通常发音为"wookie"。
+
+WQP
+参见工作队列对（Work Queue Pair）。
+
+WR
+参见工作请求（Work Request）。
